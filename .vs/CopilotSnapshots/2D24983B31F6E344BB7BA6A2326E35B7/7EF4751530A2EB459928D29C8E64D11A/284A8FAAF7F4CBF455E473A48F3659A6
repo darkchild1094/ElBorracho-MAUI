@@ -1,0 +1,52 @@
+﻿using ElBorracho.Services;
+
+namespace ElBorracho.Views;
+
+public partial class GeneradorTablasPage : ContentPage
+{
+    private readonly CartaRepository _repo = new();
+    private int _cantidad = 4;
+
+    public GeneradorTablasPage()
+    {
+        InitializeComponent();
+    }
+
+    private void OnDecrementar(object? sender, EventArgs e)
+    {
+        if (_cantidad > 1) _cantidad--;
+        LblCantidad.Text = _cantidad.ToString();
+    }
+
+    private void OnIncrementar(object? sender, EventArgs e)
+    {
+        if (_cantidad < 20) _cantidad++;
+        LblCantidad.Text = _cantidad.ToString();
+    }
+
+    private async void OnGenerarClicked(object? sender, EventArgs e)
+    {
+        var rng = new Random();
+        var sb = new System.Text.StringBuilder();
+
+        for (int t = 1; t <= _cantidad; t++)
+        {
+            sb.AppendLine($"═══ Tabla #{t} ═══");
+            var cartas = _repo.FreshDeck()
+                              .OrderBy(_ => rng.Next())
+                              .Take(16).ToList();
+            for (int row = 0; row < 4; row++)
+            {
+                var fila = cartas.Skip(row * 4).Take(4)
+                                 .Select(c => c.Nombre.PadRight(18));
+                sb.AppendLine(string.Join("│", fila));
+            }
+            sb.AppendLine();
+        }
+
+        await DisplayAlertAsync(
+            $"{_cantidad} tabla(s) generada(s)",
+            sb.ToString(),
+            "OK");
+    }
+}

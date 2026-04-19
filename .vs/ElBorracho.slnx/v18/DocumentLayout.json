@@ -1,0 +1,53 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "C:\\Users\\rahua\\source\\repos\\ElBorracho\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{0CD24132-991B-CAD4-595E-F27F419DE217}|ElBorracho\\ElBorracho.csproj|c:\\users\\rahua\\source\\repos\\elborracho\\elborracho\\mauiprogram.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{0CD24132-991B-CAD4-595E-F27F419DE217}|ElBorracho\\ElBorracho.csproj|solutionrelative:elborracho\\mauiprogram.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{0CD24132-991B-CAD4-595E-F27F419DE217}|ElBorracho\\ElBorracho.csproj|c:\\users\\rahua\\source\\repos\\elborracho\\elborracho\\views\\generadortablas.xaml.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{0CD24132-991B-CAD4-595E-F27F419DE217}|ElBorracho\\ElBorracho.csproj|solutionrelative:elborracho\\views\\generadortablas.xaml.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 1,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "GeneradorTablas.xaml.cs",
+              "DocumentMoniker": "C:\\Users\\rahua\\source\\repos\\ElBorracho\\ElBorracho\\Views\\GeneradorTablas.xaml.cs",
+              "RelativeDocumentMoniker": "ElBorracho\\Views\\GeneradorTablas.xaml.cs",
+              "ToolTip": "C:\\Users\\rahua\\source\\repos\\ElBorracho\\ElBorracho\\Views\\GeneradorTablas.xaml.cs",
+              "RelativeToolTip": "ElBorracho\\Views\\GeneradorTablas.xaml.cs",
+              "ViewState": "AgIAAAcAAAAAAAAAAIBJwAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-04-14T04:48:04.577Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "MauiProgram.cs",
+              "DocumentMoniker": "C:\\Users\\rahua\\source\\repos\\ElBorracho\\ElBorracho\\MauiProgram.cs",
+              "RelativeDocumentMoniker": "ElBorracho\\MauiProgram.cs",
+              "ToolTip": "C:\\Users\\rahua\\source\\repos\\ElBorracho\\ElBorracho\\MauiProgram.cs",
+              "RelativeToolTip": "ElBorracho\\MauiProgram.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAMoAAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-04-14T04:47:54.457Z",
+              "EditorCaption": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

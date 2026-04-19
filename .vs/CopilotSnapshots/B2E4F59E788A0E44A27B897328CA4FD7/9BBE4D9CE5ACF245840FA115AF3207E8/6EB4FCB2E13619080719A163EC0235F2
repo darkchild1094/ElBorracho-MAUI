@@ -1,0 +1,79 @@
+﻿using CommunityToolkit.Maui;
+using Microsoft.Maui.Controls.Hosting;
+using Microsoft.Maui.Hosting;
+using PdfSharpCore.Fonts;
+
+namespace ElBorracho;
+
+public static class MauiProgram
+{
+    public static MauiApp CreateMauiApp()
+    {
+        var builder = MauiApp.CreateBuilder();
+        builder
+            .UseMauiApp<App>()
+            .UseMauiCommunityToolkit()
+            .ConfigureFonts(fonts =>
+            {
+                fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
+                fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
+            });
+
+        // ─── Inyección de dependencias ───────────────────────────────────────
+        builder.Services.AddSingleton<Services.CartaRepository>();
+        builder.Services.AddTransient<ViewModels.GameViewModel>();
+        builder.Services.AddTransient<Views.GamePage>();
+        builder.Services.AddTransient<Views.GeneradorTablasPage>();
+
+        // Register embedded font resolver for PdfSharpCore
+        GlobalFontSettings.FontResolver = new EmbeddedFontResolver();
+
+        return builder.Build();
+    }
+}
+
+// Embedded font resolver implementation
+internal class EmbeddedFontResolver : IFontResolver
+{
+    private readonly Dictionary<string, byte[]> _cache = new();
+
+    public FontResolverInfo ResolveTypeface(string familyName, bool isBold, bool isItalic)
+    {
+        // Map requested family to our embedded fonts
+        if (familyName.Equals("Arial", StringComparison.OrdinalIgnoreCase) ||
+            familyName.Equals("OpenSans", StringComparison.OrdinalIgnoreCase) ||
+            familyName.Equals("OpenSans-Regular", StringComparison.OrdinalIgnoreCase))
+        {
+            return isBold ? new FontResolverInfo("OpenSans#Bold") : new FontResolverInfo("OpenSans#Regular");
+        }
+
+        // Fallback to OpenSans regular
+        return new FontResolverInfo("OpenSans#Regular");
+    }
+
+    public byte[] GetFont(string faceName)
+    {
+        if (_cache.TryGetValue(faceName, out var bytes))
+            return bytes;
+
+        bytes = faceName switch
+        {
+            "OpenSans#Regular" => LoadResourceFont("ElBorracho.Fonts.OpenSans-Regular.ttf"),
+            "OpenSans#Bold" => LoadResourceFont("ElBorracho.Fonts.OpenSans-Bold.ttf"),
+            _ => throw new InvalidOperationException($"Font not found: {faceName}")
+        };
+
+        _cache[faceName] = bytes;
+        return bytes;
+    }
+
+    private static byte[] LoadResourceFont(string resourceName)
+    {
+        var asm = typeof(EmbeddedFontResolver).Assembly;
+        using var stream = asm.GetManifestResourceStream(resourceName)
+            ?? throw new InvalidOperationException($"Resource not found: {resourceName}");
+        using var ms = new MemoryStream();
+        stream.CopyTo(ms);
+        return ms.ToArray();
+    }
+}

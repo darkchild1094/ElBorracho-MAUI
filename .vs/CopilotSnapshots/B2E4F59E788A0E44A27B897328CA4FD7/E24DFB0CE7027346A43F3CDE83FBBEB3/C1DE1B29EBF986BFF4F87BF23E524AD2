@@ -1,0 +1,152 @@
+﻿using CommunityToolkit.Maui;
+using Microsoft.Maui.Controls.Hosting;
+using Microsoft.Maui.Hosting;
+using PdfSharpCore.Fonts;
+using System.Reflection;
+using System.Collections.Generic;
+using System.IO;
+using System;
+
+namespace ElBorracho;
+
+public static class MauiProgram
+{
+    public static MauiApp CreateMauiApp()
+    {
+        var builder = MauiApp.CreateBuilder();
+        builder
+            .UseMauiApp<App>()
+            .UseMauiCommunityToolkit()
+            .ConfigureFonts(fonts =>
+            {
+                fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
+                fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
+            });
+
+        // Register embedded/system font resolver for PdfSharpCore
+        GlobalFontSettings.FontResolver = new EmbeddedFontResolver();
+
+        return builder.Build();
+    }
+}
+
+// Font resolver that tries (in order): system font folders, then embedded resources.
+internal class EmbeddedFontResolver : IFontResolver
+{
+    private readonly Dictionary<string, byte[]> _cache = new();
+
+    public string DefaultFontName => "Arial#Regular";
+
+    public FontResolverInfo ResolveTypeface(string familyName, bool isBold, bool isItalic)
+    {
+        if (string.IsNullOrEmpty(familyName))
+            return new FontResolverInfo(DefaultFontName);
+
+        var name = familyName.Trim();
+        if (name.Equals("Arial", StringComparison.OrdinalIgnoreCase))
+        {
+            if (isBold && isItalic) return new FontResolverInfo("Arial#BoldItalic");
+            if (isBold) return new FontResolverInfo("Arial#Bold");
+            if (isItalic) return new FontResolverInfo("Arial#Italic");
+            return new FontResolverInfo("Arial#Regular");
+        }
+
+        if (name.IndexOf("opensans", StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            if (isBold) return new FontResolverInfo("OpenSans#Bold");
+            return new FontResolverInfo("OpenSans#Regular");
+        }
+
+        // Fallback
+        return new FontResolverInfo(DefaultFontName);
+    }
+
+    public byte[] GetFont(string faceName)
+    {
+        if (_cache.TryGetValue(faceName, out var bytes))
+            return bytes;
+
+        // Attempt to load from common system font locations
+        bytes = faceName switch
+        {
+            "Arial#Regular" => TryLoadSystemFonts(new[] { "arial.ttf", "Arial.ttf", "ArialMT.ttf" }),
+            "Arial#Bold" => TryLoadSystemFonts(new[] { "arialbd.ttf", "Arial Bold.ttf", "Arial-BoldMT.ttf" }),
+            "Arial#Italic" => TryLoadSystemFonts(new[] { "ariali.ttf", "Arial Italic.ttf", "Arial-ItalicMT.ttf" }),
+            "Arial#BoldItalic" => TryLoadSystemFonts(new[] { "arialbi.ttf", "Arial Bold Italic.ttf", "Arial-BoldItalicMT.ttf" }),
+            "OpenSans#Regular" => TryLoadEmbeddedResourceFonts(new[] { "ElBorracho.Fonts.OpenSans-Regular.ttf", "Resources.Fonts.OpenSans-Regular.ttf" }),
+            "OpenSans#Bold" => TryLoadEmbeddedResourceFonts(new[] { "ElBorracho.Fonts.OpenSans-Bold.ttf", "Resources.Fonts.OpenSans-Bold.ttf" }),
+            _ => null
+        };
+
+        if (bytes == null)
+            throw new InvalidOperationException($"Font not found for face '{faceName}'. Ensure the font is available on the device or embedded in the app.");
+
+        _cache[faceName] = bytes;
+        return bytes;
+    }
+
+    private static byte[] TryLoadSystemFonts(string[] candidateFileNames)
+    {
+        var searchDirs = new List<string>();
+
+        if (OperatingSystem.IsWindows())
+        {
+            var winFonts = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Fonts");
+            searchDirs.Add(winFonts);
+        }
+        else if (OperatingSystem.IsMacOS() || OperatingSystem.IsMacCatalyst())
+        {
+            searchDirs.Add("/Library/Fonts");
+            searchDirs.Add("/System/Library/Fonts");
+            searchDirs.Add("/System/Library/Fonts/Supplemental");
+        }
+        else // Linux / Android
+        {
+            searchDirs.Add("/usr/share/fonts");
+            searchDirs.Add("/usr/local/share/fonts");
+        }
+
+        foreach (var dir in searchDirs)
+        {
+            try
+            {
+                if (!Directory.Exists(dir)) continue;
+
+                foreach (var candidate in candidateFileNames)
+                {
+                    // Search with wildcard to cover case differences
+                    var files = Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories);
+                    foreach (var f in files)
+                    {
+                        if (string.Equals(Path.GetFileName(f), candidate, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return File.ReadAllBytes(f);
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // ignore permission errors and continue
+            }
+        }
+
+        return null;
+    }
+
+    private static byte[] TryLoadEmbeddedResourceFonts(string[] resourceNames)
+    {
+        var asm = Assembly.GetExecutingAssembly();
+        foreach (var res in resourceNames)
+        {
+            using var stream = asm.GetManifestResourceStream(res);
+            if (stream != null)
+            {
+                using var ms = new MemoryStream();
+                stream.CopyTo(ms);
+                return ms.ToArray();
+            }
+        }
+        return null;
+    }
+}

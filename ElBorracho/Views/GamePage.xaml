@@ -1,0 +1,322 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage x:Class="ElBorracho.Views.GamePage"
+             xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:models="clr-namespace:ElBorracho.Models"
+             xmlns:converters="clr-namespace:ElBorracho.Converters"
+             BackgroundColor="#160810"
+             Shell.NavBarIsVisible="False">
+
+    <ContentPage.Resources>
+        <ResourceDictionary>
+            <converters:NullToBoolConverter    x:Key="NullToBoolConverter"/>
+            <converters:NotNullToBoolConverter x:Key="NotNullToBoolConverter"/>
+            <converters:ZeroToBoolConverter    x:Key="ZeroToBoolConverter"/>
+            <Style x:Key="ActionBtn" TargetType="Button">
+                <Setter Property="FontSize"       Value="14"/>
+                <Setter Property="FontAttributes" Value="Bold"/>
+                <Setter Property="CornerRadius"   Value="12"/>
+                <Setter Property="Padding"        Value="16,10"/>
+                <Setter Property="HeightRequest"  Value="46"/>
+            </Style>
+        </ResourceDictionary>
+    </ContentPage.Resources>
+
+    <Grid x:Name="RootGrid">
+
+        <!-- ══════════ CONTENIDO PRINCIPAL ══════════ -->
+        <Grid RowDefinitions="Auto,*,Auto,12" Padding="0">
+
+            <!-- TOP BAR -->
+            <Grid Grid.Row="0" BackgroundColor="#22101A"
+                  Padding="12,44,12,10"
+                  ColumnDefinitions="44,*,Auto">
+
+                <Button Grid.Column="0"
+                        Text="☰" FontSize="22"
+                        TextColor="#F0E4D0" BackgroundColor="Transparent"
+                        Clicked="OnMenuClicked"
+                        WidthRequest="44" HeightRequest="44" Padding="0"/>
+
+                <Label Grid.Column="1" Text="LOTERÍA"
+                       FontSize="20" FontAttributes="Bold"
+                       TextColor="#D4175A"
+                       HorizontalOptions="Center" VerticalOptions="Center"/>
+
+                <HorizontalStackLayout Grid.Column="2"
+                                       VerticalOptions="Center" Spacing="4">
+                    <Label Text="{Binding RemainingCount}"
+                           FontSize="20" FontAttributes="Bold"
+                           TextColor="#C4940C" VerticalOptions="Center"/>
+                    <Label Text="cartas" FontSize="11" TextColor="#A07888"
+                           VerticalOptions="End" Margin="0,0,0,2"/>
+                </HorizontalStackLayout>
+            </Grid>
+
+            <!-- ZONA CENTRAL -->
+            <Grid Grid.Row="1" RowDefinitions="*,Auto" Padding="16,12">
+
+                <!-- Área de carta -->
+                <Grid Grid.Row="0"
+                      HorizontalOptions="Center" VerticalOptions="Center">
+
+                    <!-- Mazo apilado siempre visible -->
+                    <Grid x:Name="CardStackArea"
+                          WidthRequest="260" HeightRequest="360"
+                          HorizontalOptions="Center" VerticalOptions="Center">
+
+                        <!-- Carta 5 más atrás -->
+                        <Border x:Name="Ghost5"
+                                BackgroundColor="#E8DFC5"
+                                Stroke="#241208" StrokeThickness="2"
+                                WidthRequest="240" HeightRequest="330"
+                                HorizontalOptions="Center" VerticalOptions="Center"
+                                Rotation="-11" TranslationX="-8" TranslationY="6">
+                            <Border.StrokeShape>
+                                <RoundRectangle CornerRadius="16"/>
+                            </Border.StrokeShape>
+                            <Border.Shadow>
+                                <Shadow Brush="Black" Offset="0,4" Radius="8" Opacity="0.4"/>
+                            </Border.Shadow>
+                            <Image Source="el_gallo.jpg" Aspect="AspectFill" Opacity="0.35"/>
+                        </Border>
+
+                        <!-- Carta 4 -->
+                        <Border x:Name="Ghost4"
+                                BackgroundColor="#EDE5CC"
+                                Stroke="#241208" StrokeThickness="2"
+                                WidthRequest="240" HeightRequest="330"
+                                HorizontalOptions="Center" VerticalOptions="Center"
+                                Rotation="9" TranslationX="6" TranslationY="4">
+                            <Border.StrokeShape>
+                                <RoundRectangle CornerRadius="16"/>
+                            </Border.StrokeShape>
+                            <Border.Shadow>
+                                <Shadow Brush="Black" Offset="0,4" Radius="8" Opacity="0.4"/>
+                            </Border.Shadow>
+                            <Image Source="la_luna.jpg" Aspect="AspectFill" Opacity="0.35"/>
+                        </Border>
+
+                        <!-- Carta 3 -->
+                        <Border x:Name="Ghost3"
+                                BackgroundColor="#F0E8D0"
+                                Stroke="#241208" StrokeThickness="2"
+                                WidthRequest="240" HeightRequest="330"
+                                HorizontalOptions="Center" VerticalOptions="Center"
+                                Rotation="-6" TranslationX="-4" TranslationY="2">
+                            <Border.StrokeShape>
+                                <RoundRectangle CornerRadius="16"/>
+                            </Border.StrokeShape>
+                            <Border.Shadow>
+                                <Shadow Brush="Black" Offset="0,4" Radius="8" Opacity="0.4"/>
+                            </Border.Shadow>
+                            <Image Source="el_sol.jpg" Aspect="AspectFill" Opacity="0.35"/>
+                        </Border>
+
+                        <!-- Carta 2 -->
+                        <Border x:Name="Ghost2"
+                                BackgroundColor="#F3ECD8"
+                                Stroke="#241208" StrokeThickness="2"
+                                WidthRequest="240" HeightRequest="330"
+                                HorizontalOptions="Center" VerticalOptions="Center"
+                                Rotation="4" TranslationX="3" TranslationY="1">
+                            <Border.StrokeShape>
+                                <RoundRectangle CornerRadius="16"/>
+                            </Border.StrokeShape>
+                            <Border.Shadow>
+                                <Shadow Brush="Black" Offset="0,4" Radius="8" Opacity="0.4"/>
+                            </Border.Shadow>
+                            <Image Source="el_borracho.jpg" Aspect="AspectFill" Opacity="0.35"/>
+                        </Border>
+
+                        <!-- Intro card (sin partida) -->
+                        <Border x:Name="IntroCard"
+                                IsVisible="{Binding CurrentCard, Converter={StaticResource NullToBoolConverter}}"
+                                BackgroundColor="#F5EDD6"
+                                Stroke="#241208" StrokeThickness="2"
+                                WidthRequest="240" HeightRequest="330"
+                                HorizontalOptions="Center" VerticalOptions="Center"
+                                Rotation="-2">
+                            <Border.StrokeShape>
+                                <RoundRectangle CornerRadius="16"/>
+                            </Border.StrokeShape>
+                            <Border.Shadow>
+                                <Shadow Brush="Black" Offset="0,6" Radius="16" Opacity="0.6"/>
+                            </Border.Shadow>
+                            <Border.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnCardTapped"/>
+                                <PanGestureRecognizer PanUpdated="OnIntroPan"/>
+                            </Border.GestureRecognizers>
+                            <Grid RowDefinitions="*,Auto">
+                                <Image Grid.Row="0" Source="intro.jpg"
+                                       Aspect="AspectFill" HeightRequest="270"/>
+                                <Label Grid.Row="1" Text="Toca para iniciar"
+                                       BackgroundColor="#160810" TextColor="#F5EDD6"
+                                       FontSize="15" FontAttributes="Bold"
+                                       HorizontalTextAlignment="Center" Padding="8,6"/>
+                            </Grid>
+                        </Border>
+
+                        <!-- Carta actual durante partida -->
+                        <Border x:Name="CardFrame"
+                                IsVisible="{Binding CurrentCard, Converter={StaticResource NotNullToBoolConverter}}"
+                                BackgroundColor="#F5EDD6"
+                                Stroke="#241208" StrokeThickness="2"
+                                WidthRequest="240" HeightRequest="330"
+                                HorizontalOptions="Center" VerticalOptions="Center">
+                            <Border.StrokeShape>
+                                <RoundRectangle CornerRadius="16"/>
+                            </Border.StrokeShape>
+                            <Border.Shadow>
+                                <Shadow Brush="Black" Offset="0,6" Radius="16" Opacity="0.6"/>
+                            </Border.Shadow>
+                            <Border.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnCardTapped"/>
+                            </Border.GestureRecognizers>
+                            <Grid RowDefinitions="*,Auto">
+                                <Image Grid.Row="0"
+                                       Source="{Binding CurrentCard.Imagen, StringFormat='{0}.jpg'}"
+                                       Aspect="AspectFill" HeightRequest="270"/>
+                                <Label Grid.Row="1"
+                                       Text="{Binding CurrentCard.Nombre}"
+                                       BackgroundColor="#160810" TextColor="#F5EDD6"
+                                       FontSize="15" FontAttributes="Bold"
+                                       HorizontalTextAlignment="Center" Padding="8,6"/>
+                            </Grid>
+                        </Border>
+
+                    </Grid>
+                </Grid>
+
+                <!-- Historial -->
+                <VerticalStackLayout Grid.Row="1" Spacing="6" Margin="0,8,0,0">
+                    <Label Text="Historial" FontSize="11" FontAttributes="Bold"
+                           TextColor="#A07888" Margin="2,0"/>
+                    <ScrollView x:Name="HistScroll"
+                                Orientation="Horizontal" HeightRequest="72">
+                        <HorizontalStackLayout Spacing="6" Padding="4,0"
+                            BindableLayout.ItemsSource="{Binding PlayedCards}">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="models:Carta">
+                                    <Border BackgroundColor="#F5EDD6"
+                                            Stroke="#241208" StrokeThickness="1"
+                                            WidthRequest="46" HeightRequest="62">
+                                        <Border.StrokeShape>
+                                            <RoundRectangle CornerRadius="8"/>
+                                        </Border.StrokeShape>
+                                        <Image Source="{Binding Imagen, StringFormat='{0}.jpg'}"
+                                               Aspect="AspectFill" Margin="2"/>
+                                    </Border>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </HorizontalStackLayout>
+                    </ScrollView>
+                    <Label Text="Sin cartas aún" FontSize="12" TextColor="#704858"
+                           IsVisible="{Binding PlayedCards.Count, Converter={StaticResource ZeroToBoolConverter}}"
+                           HorizontalOptions="Center"/>
+                </VerticalStackLayout>
+            </Grid>
+
+            <!-- BOTONES -->
+            <Grid Grid.Row="2"
+                  ColumnDefinitions="50,*,Auto,Auto"
+                  Padding="16,0" ColumnSpacing="10">
+
+                <Button Grid.Column="0" Text="🔀" FontSize="20"
+                        BackgroundColor="#2E1520" TextColor="#F0E4D0"
+                        CornerRadius="12" WidthRequest="50" HeightRequest="50" Padding="0"
+                        IsEnabled="{Binding CanShuffle}"
+                        Command="{Binding ShuffleDeckCommand}"/>
+
+                <Button Grid.Column="1" x:Name="BtnPlay"
+                        Text="{Binding PlayButtonText}"
+                        BackgroundColor="#D4175A" TextColor="White"
+                        Style="{StaticResource ActionBtn}"
+                        IsEnabled="{Binding CanPlayPause}"
+                        Command="{Binding ToggleAutoPlayCommand}"/>
+
+                <Button Grid.Column="2" Text="Sig."
+                        BackgroundColor="#2E1520" TextColor="#F0E4D0"
+                        Style="{StaticResource ActionBtn}"
+                        IsEnabled="{Binding CanNext}"
+                        Command="{Binding NextCardManualCommand}"/>
+
+                <Button Grid.Column="3" Text="Nuevo"
+                        BackgroundColor="#3D1D2A" TextColor="#F0E4D0"
+                        Style="{StaticResource ActionBtn}"
+                        IsEnabled="{Binding CanReset}"
+                        Command="{Binding ResetGameCommand}"/>
+            </Grid>
+        </Grid>
+
+        <!-- SIDEBAR OVERLAY -->
+        <BoxView x:Name="SidebarOverlay" Color="#AA000000"
+                 IsVisible="False" Opacity="0">
+            <BoxView.GestureRecognizers>
+                <TapGestureRecognizer Tapped="OnOverlayTapped"/>
+            </BoxView.GestureRecognizers>
+        </BoxView>
+
+        <!-- Panel sidebar -->
+        <Grid x:Name="SidebarPanel" BackgroundColor="#22101A"
+              HorizontalOptions="Start" VerticalOptions="Fill"
+              WidthRequest="300" TranslationX="-300"
+              RowDefinitions="Auto,Auto,Auto,*,Auto"
+              Padding="20,50,20,30">
+
+            <Grid Grid.Row="0" ColumnDefinitions="*,40" Margin="0,0,0,20">
+                <VerticalStackLayout Grid.Column="0" Spacing="2">
+                    <Label Text="Lotería El Borracho"
+                           FontSize="16" FontAttributes="Bold" TextColor="#D4175A"/>
+                    <Label Text="v1.0 · Clemente Jacq. · MX"
+                           FontSize="11" TextColor="#704858"/>
+                </VerticalStackLayout>
+                <Button Grid.Column="1" Text="✕" FontSize="16"
+                        TextColor="#A07888" BackgroundColor="Transparent"
+                        Clicked="OnCloseSidebar"
+                        WidthRequest="40" HeightRequest="40" Padding="0"/>
+            </Grid>
+
+            <BoxView Grid.Row="1" HeightRequest="1"
+                     BackgroundColor="#1FF0E4D0" Margin="0,0,0,16"/>
+
+            <VerticalStackLayout Grid.Row="2" Spacing="8" Margin="0,0,0,20">
+                <Label Text="Velocidad entre cartas"
+                       FontSize="12" FontAttributes="Bold" TextColor="#A07888"/>
+                <Grid ColumnDefinitions="*,Auto">
+                    <Label x:Name="LblSpeedName" Grid.Column="0"
+                           Text="Normal" FontSize="14" FontAttributes="Bold"
+                           TextColor="#F0E4D0"/>
+                    <Label x:Name="LblSpeedValue" Grid.Column="1"
+                           Text="5 s" FontSize="14" TextColor="#C4940C"/>
+                </Grid>
+                <Slider x:Name="SpeedSlider"
+                        Minimum="0" Maximum="5" Value="2"
+                        ThumbColor="#D4175A"
+                        MinimumTrackColor="#D4175A"
+                        MaximumTrackColor="#3D1D2A"
+                        ValueChanged="OnSpeedChanged"/>
+            </VerticalStackLayout>
+
+            <VerticalStackLayout Grid.Row="3" Spacing="8">
+                <Button Text="🎴  Generador de tablas"
+                        HorizontalOptions="Fill"
+                        BackgroundColor="#2E1520" TextColor="#F0E4D0"
+                        FontSize="14" CornerRadius="10" Padding="16,12"
+                        Clicked="OnGeneradorClicked"/>
+                <Button Text="🐛  Reportar un bug"
+                        HorizontalOptions="Fill"
+                        BackgroundColor="#2E1520" TextColor="#F0E4D0"
+                        FontSize="14" CornerRadius="10" Padding="16,12"
+                        Clicked="OnBugClicked"/>
+            </VerticalStackLayout>
+
+            <Button Grid.Row="4" Text="🚪  Salir del juego"
+                    HorizontalOptions="Fill"
+                    BackgroundColor="#AA1111" TextColor="White"
+                    FontSize="14" CornerRadius="10" Padding="16,12"
+                    Clicked="OnSalirClicked"/>
+        </Grid>
+
+    </Grid>
+</ContentPage>
