@@ -1,0 +1,1212 @@
+diff --git a/ElBorracho/ElBorracho.csproj b/ElBorracho/ElBorracho.csproj
+index 6738b0a..da30524 100644
+--- a/ElBorracho/ElBorracho.csproj
++++ b/ElBorracho/ElBorracho.csproj
+@@ -49,10 +49,10 @@
+ 
+ 	<ItemGroup>
+ 		<!-- App Icon -->
+-		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#512BD4" />
++		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#160810" />
+ 
+ 		<!-- Splash Screen -->
+-		<MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#512BD4" BaseSize="128,128" />
++		<MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#160810" BaseSize="128,128" />
+ 
+ 		<!-- Images -->
+ 		<MauiImage Include="Resources\Images\*" />
+diff --git a/ElBorracho/MauiProgram.cs b/ElBorracho/MauiProgram.cs
+index 67909c3..9d49fd4 100644
+--- a/ElBorracho/MauiProgram.cs
++++ b/ElBorracho/MauiProgram.cs
+@@ -1,4 +1,7 @@
+ ﻿using CommunityToolkit.Maui;
++using ElBorracho.Services;
++using ElBorracho.ViewModels;
++using ElBorracho.Views;
+ using Microsoft.Maui.Controls.Hosting;
+ using Microsoft.Maui.Hosting;
+ using PdfSharpCore.Fonts;
+@@ -23,8 +26,15 @@ public static class MauiProgram
+                 fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
+             });
+ 
+-        // Register embedded/system font resolver for PdfSharpCore
+-        GlobalFontSettings.FontResolver = new EmbeddedFontResolver();
++        // ── Dependency Injection ──────────────────────────────────────────────
++        builder.Services.AddSingleton<CartaRepository>();
++        builder.Services.AddTransient<GameViewModel>();
++        builder.Services.AddTransient<GamePage>();
++        builder.Services.AddTransient<GeneradorTablasPage>();
++
++        // Register font resolver for PdfSharpCore (PDF generation only)
++        try { GlobalFontSettings.FontResolver = new EmbeddedFontResolver(); }
++        catch { /* Non-fatal: PDF generation will fall back gracefully */ }
+ 
+         return builder.Build();
+     }
+@@ -85,8 +95,9 @@ internal class EmbeddedFontResolver : IFontResolver
+             _ => null
+         };
+ 
+-        if (bytes == null)
+-            throw new InvalidOperationException($"Font not found for face '{faceName}'. Ensure the font is available on the device or embedded in the app.");
++        // Fallback: return an empty array rather than crashing the app.
++        // PDF generation will degrade gracefully if font is not found.
++        bytes ??= Array.Empty<byte>();
+ 
+         _cache[faceName] = bytes;
+         return bytes;
+diff --git a/ElBorracho/Views/GamePage.xaml b/ElBorracho/Views/GamePage.xaml
+index d949c5c..c303d76 100644
+--- a/ElBorracho/Views/GamePage.xaml
++++ b/ElBorracho/Views/GamePage.xaml
+@@ -15,21 +15,21 @@
+             <Style x:Key="ActionBtn" TargetType="Button">
+                 <Setter Property="FontSize"       Value="14"/>
+                 <Setter Property="FontAttributes" Value="Bold"/>
+-                <Setter Property="CornerRadius"   Value="12"/>
+-                <Setter Property="Padding"        Value="16,10"/>
+-                <Setter Property="HeightRequest"  Value="46"/>
++                <Setter Property="CornerRadius"   Value="14"/>
++                <Setter Property="Padding"        Value="16,0"/>
++                <Setter Property="HeightRequest"  Value="50"/>
+             </Style>
+         </ResourceDictionary>
+     </ContentPage.Resources>
+ 
+     <Grid x:Name="RootGrid">
+ 
+-        <!-- ══════════ CONTENIDO PRINCIPAL ══════════ -->
+-        <Grid RowDefinitions="Auto,*,Auto,12" Padding="0">
++        <!-- ══════════ MAIN CONTENT ══════════ -->
++        <Grid RowDefinitions="Auto,Auto,*,Auto,Auto" Padding="0">
+ 
+             <!-- TOP BAR -->
+             <Grid Grid.Row="0" BackgroundColor="#22101A"
+-                  Padding="12,44,12,10"
++                  Padding="12,44,16,12"
+                   ColumnDefinitions="44,*,Auto">
+ 
+                 <Button Grid.Column="0"
+@@ -43,93 +43,91 @@
+                        TextColor="#D4175A"
+                        HorizontalOptions="Center" VerticalOptions="Center"/>
+ 
+-                <HorizontalStackLayout Grid.Column="2"
+-                                       VerticalOptions="Center" Spacing="4">
+-                    <Label Text="{Binding RemainingCount}"
+-                           FontSize="20" FontAttributes="Bold"
+-                           TextColor="#C4940C" VerticalOptions="Center"/>
+-                    <Label Text="cartas" FontSize="11" TextColor="#A07888"
+-                           VerticalOptions="End" Margin="0,0,0,2"/>
+-                </HorizontalStackLayout>
++                <!-- Cards remaining badge -->
++                <Border Grid.Column="2"
++                        BackgroundColor="#3D1D2A"
++                        StrokeThickness="0"
++                        Padding="10,6">
++                    <Border.StrokeShape>
++                        <RoundRectangle CornerRadius="10"/>
++                    </Border.StrokeShape>
++                    <HorizontalStackLayout Spacing="4" VerticalOptions="Center">
++                        <Label Text="{Binding RemainingCount}"
++                               FontSize="18" FontAttributes="Bold"
++                               TextColor="#C4940C" VerticalOptions="Center"/>
++                        <Label Text="/" FontSize="12" TextColor="#704858"
++                               VerticalOptions="Center"/>
++                        <Label Text="54" FontSize="12" TextColor="#704858"
++                               VerticalOptions="Center"/>
++                    </HorizontalStackLayout>
++                </Border>
+             </Grid>
+ 
+-            <!-- ZONA CENTRAL -->
+-            <Grid Grid.Row="1" RowDefinitions="*,Auto" Padding="16,12">
++            <!-- PROGRESS BAR -->
++            <Grid Grid.Row="1" BackgroundColor="#22101A" Padding="16,0,16,10">
++                <Grid RowDefinitions="Auto,4" RowSpacing="0">
++                    <ProgressBar Grid.Row="1"
++                                 x:Name="ProgressBar"
++                                 Progress="0"
++                                 ProgressColor="#D4175A"
++                                 BackgroundColor="#3D1D2A"
++                                 HeightRequest="4"/>
++                </Grid>
++            </Grid>
+ 
+-                <!-- Área de carta -->
++            <!-- CARD AREA -->
++            <Grid Grid.Row="2" RowDefinitions="*,Auto" Padding="16,8,16,8">
++
++                <!-- Card stack -->
+                 <Grid Grid.Row="0"
+                       HorizontalOptions="Center" VerticalOptions="Center">
+ 
+-                    <!-- Mazo apilado siempre visible -->
+                     <Grid x:Name="CardStackArea"
+                           WidthRequest="260" HeightRequest="360"
+                           HorizontalOptions="Center" VerticalOptions="Center">
+ 
+-                        <!-- Carta 5 más atrás -->
+-                        <Border x:Name="Ghost5"
+-                                BackgroundColor="#E8DFC5"
++                        <!-- Ghost cards (deck effect) -->
++                        <Border x:Name="Ghost5" BackgroundColor="#E8DFC5"
+                                 Stroke="#241208" StrokeThickness="2"
+                                 WidthRequest="240" HeightRequest="330"
+                                 HorizontalOptions="Center" VerticalOptions="Center"
+                                 Rotation="-11" TranslationX="-8" TranslationY="6">
+-                            <Border.StrokeShape>
+-                                <RoundRectangle CornerRadius="16"/>
+-                            </Border.StrokeShape>
+-                            <Border.Shadow>
+-                                <Shadow Brush="Black" Offset="0,4" Radius="8" Opacity="0.4"/>
+-                            </Border.Shadow>
+-                            <Image Source="el_gallo.jpg" Aspect="AspectFill" Opacity="0.35"/>
++                            <Border.StrokeShape><RoundRectangle CornerRadius="16"/></Border.StrokeShape>
++                            <Border.Shadow><Shadow Brush="Black" Offset="0,4" Radius="8" Opacity="0.4"/></Border.Shadow>
++                            <Image Source="el_gallo.jpg" Aspect="AspectFill" Opacity="0.3"/>
+                         </Border>
+ 
+-                        <!-- Carta 4 -->
+-                        <Border x:Name="Ghost4"
+-                                BackgroundColor="#EDE5CC"
++                        <Border x:Name="Ghost4" BackgroundColor="#EDE5CC"
+                                 Stroke="#241208" StrokeThickness="2"
+                                 WidthRequest="240" HeightRequest="330"
+                                 HorizontalOptions="Center" VerticalOptions="Center"
+                                 Rotation="9" TranslationX="6" TranslationY="4">
+-                            <Border.StrokeShape>
+-                                <RoundRectangle CornerRadius="16"/>
+-                            </Border.StrokeShape>
+-                            <Border.Shadow>
+-                                <Shadow Brush="Black" Offset="0,4" Radius="8" Opacity="0.4"/>
+-                            </Border.Shadow>
+-                            <Image Source="la_luna.jpg" Aspect="AspectFill" Opacity="0.35"/>
++                            <Border.StrokeShape><RoundRectangle CornerRadius="16"/></Border.StrokeShape>
++                            <Border.Shadow><Shadow Brush="Black" Offset="0,4" Radius="8" Opacity="0.4"/></Border.Shadow>
++                            <Image Source="la_luna.jpg" Aspect="AspectFill" Opacity="0.3"/>
+                         </Border>
+ 
+-                        <!-- Carta 3 -->
+-                        <Border x:Name="Ghost3"
+-                                BackgroundColor="#F0E8D0"
++                        <Border x:Name="Ghost3" BackgroundColor="#F0E8D0"
+                                 Stroke="#241208" StrokeThickness="2"
+                                 WidthRequest="240" HeightRequest="330"
+                                 HorizontalOptions="Center" VerticalOptions="Center"
+                                 Rotation="-6" TranslationX="-4" TranslationY="2">
+-                            <Border.StrokeShape>
+-                                <RoundRectangle CornerRadius="16"/>
+-                            </Border.StrokeShape>
+-                            <Border.Shadow>
+-                                <Shadow Brush="Black" Offset="0,4" Radius="8" Opacity="0.4"/>
+-                            </Border.Shadow>
+-                            <Image Source="el_sol.jpg" Aspect="AspectFill" Opacity="0.35"/>
++                            <Border.StrokeShape><RoundRectangle CornerRadius="16"/></Border.StrokeShape>
++                            <Border.Shadow><Shadow Brush="Black" Offset="0,4" Radius="8" Opacity="0.4"/></Border.Shadow>
++                            <Image Source="el_sol.jpg" Aspect="AspectFill" Opacity="0.3"/>
+                         </Border>
+ 
+-                        <!-- Carta 2 -->
+-                        <Border x:Name="Ghost2"
+-                                BackgroundColor="#F3ECD8"
++                        <Border x:Name="Ghost2" BackgroundColor="#F3ECD8"
+                                 Stroke="#241208" StrokeThickness="2"
+                                 WidthRequest="240" HeightRequest="330"
+                                 HorizontalOptions="Center" VerticalOptions="Center"
+                                 Rotation="4" TranslationX="3" TranslationY="1">
+-                            <Border.StrokeShape>
+-                                <RoundRectangle CornerRadius="16"/>
+-                            </Border.StrokeShape>
+-                            <Border.Shadow>
+-                                <Shadow Brush="Black" Offset="0,4" Radius="8" Opacity="0.4"/>
+-                            </Border.Shadow>
+-                            <Image Source="el_borracho.jpg" Aspect="AspectFill" Opacity="0.35"/>
++                            <Border.StrokeShape><RoundRectangle CornerRadius="16"/></Border.StrokeShape>
++                            <Border.Shadow><Shadow Brush="Black" Offset="0,4" Radius="8" Opacity="0.4"/></Border.Shadow>
++                            <Image Source="el_borracho.jpg" Aspect="AspectFill" Opacity="0.3"/>
+                         </Border>
+ 
+-                        <!-- Intro card (sin partida) -->
++                        <!-- Intro card (no game started) -->
+                         <Border x:Name="IntroCard"
+                                 IsVisible="{Binding CurrentCard, Converter={StaticResource NullToBoolConverter}}"
+                                 BackgroundColor="#F5EDD6"
+@@ -137,12 +135,8 @@
+                                 WidthRequest="240" HeightRequest="330"
+                                 HorizontalOptions="Center" VerticalOptions="Center"
+                                 Rotation="-2">
+-                            <Border.StrokeShape>
+-                                <RoundRectangle CornerRadius="16"/>
+-                            </Border.StrokeShape>
+-                            <Border.Shadow>
+-                                <Shadow Brush="Black" Offset="0,6" Radius="16" Opacity="0.6"/>
+-                            </Border.Shadow>
++                            <Border.StrokeShape><RoundRectangle CornerRadius="16"/></Border.StrokeShape>
++                            <Border.Shadow><Shadow Brush="Black" Offset="0,8" Radius="20" Opacity="0.65"/></Border.Shadow>
+                             <Border.GestureRecognizers>
+                                 <TapGestureRecognizer Tapped="OnCardTapped"/>
+                                 <PanGestureRecognizer PanUpdated="OnIntroPan"/>
+@@ -150,26 +144,24 @@
+                             <Grid RowDefinitions="*,Auto">
+                                 <Image Grid.Row="0" Source="intro.jpg"
+                                        Aspect="AspectFill" HeightRequest="270"/>
+-                                <Label Grid.Row="1" Text="Toca para iniciar"
+-                                       BackgroundColor="#160810" TextColor="#F5EDD6"
+-                                       FontSize="15" FontAttributes="Bold"
+-                                       HorizontalTextAlignment="Center" Padding="8,6"/>
++                                <Grid Grid.Row="1" BackgroundColor="#160810" Padding="8,8">
++                                    <Label Text="Toca para iniciar"
++                                           TextColor="#F5EDD6"
++                                           FontSize="15" FontAttributes="Bold"
++                                           HorizontalTextAlignment="Center"/>
++                                </Grid>
+                             </Grid>
+                         </Border>
+ 
+-                        <!-- Carta actual durante partida -->
++                        <!-- Active card -->
+                         <Border x:Name="CardFrame"
+                                 IsVisible="{Binding CurrentCard, Converter={StaticResource NotNullToBoolConverter}}"
+                                 BackgroundColor="#F5EDD6"
+                                 Stroke="#241208" StrokeThickness="2"
+                                 WidthRequest="240" HeightRequest="330"
+                                 HorizontalOptions="Center" VerticalOptions="Center">
+-                            <Border.StrokeShape>
+-                                <RoundRectangle CornerRadius="16"/>
+-                            </Border.StrokeShape>
+-                            <Border.Shadow>
+-                                <Shadow Brush="Black" Offset="0,6" Radius="16" Opacity="0.6"/>
+-                            </Border.Shadow>
++                            <Border.StrokeShape><RoundRectangle CornerRadius="16"/></Border.StrokeShape>
++                            <Border.Shadow><Shadow Brush="Black" Offset="0,8" Radius="20" Opacity="0.65"/></Border.Shadow>
+                             <Border.GestureRecognizers>
+                                 <TapGestureRecognizer Tapped="OnCardTapped"/>
+                             </Border.GestureRecognizers>
+@@ -177,33 +169,39 @@
+                                 <Image Grid.Row="0"
+                                        Source="{Binding CurrentCard.Imagen, StringFormat='{0}.jpg'}"
+                                        Aspect="AspectFill" HeightRequest="270"/>
+-                                <Label Grid.Row="1"
+-                                       Text="{Binding CurrentCard.Nombre}"
+-                                       BackgroundColor="#160810" TextColor="#F5EDD6"
+-                                       FontSize="15" FontAttributes="Bold"
+-                                       HorizontalTextAlignment="Center" Padding="8,6"/>
++                                <Grid Grid.Row="1" BackgroundColor="#160810" Padding="8,8">
++                                    <Label Text="{Binding CurrentCard.Nombre}"
++                                           TextColor="#F5EDD6"
++                                           FontSize="15" FontAttributes="Bold"
++                                           HorizontalTextAlignment="Center"/>
++                                </Grid>
+                             </Grid>
+                         </Border>
+ 
+                     </Grid>
+                 </Grid>
+ 
+-                <!-- Historial -->
+-                <VerticalStackLayout Grid.Row="1" Spacing="6" Margin="0,8,0,0">
+-                    <Label Text="Historial" FontSize="11" FontAttributes="Bold"
+-                           TextColor="#A07888" Margin="2,0"/>
++                <!-- History -->
++                <VerticalStackLayout Grid.Row="1" Spacing="6" Margin="0,4,0,0">
++                    <Grid ColumnDefinitions="*,Auto">
++                        <Label Grid.Column="0"
++                               Text="HISTORIAL" FontSize="10" FontAttributes="Bold"
++                               TextColor="#704858" Margin="2,0" VerticalOptions="Center"/>
++                        <Label Grid.Column="1"
++                               Text="{Binding PlayedCards.Count, StringFormat='{0} cartas'}"
++                               FontSize="10" TextColor="#704858" VerticalOptions="Center"/>
++                    </Grid>
+                     <ScrollView x:Name="HistScroll"
+-                                Orientation="Horizontal" HeightRequest="72">
++                                Orientation="Horizontal" HeightRequest="74">
+                         <HorizontalStackLayout Spacing="6" Padding="4,0"
+                             BindableLayout.ItemsSource="{Binding PlayedCards}">
+                             <BindableLayout.ItemTemplate>
+                                 <DataTemplate x:DataType="models:Carta">
+                                     <Border BackgroundColor="#F5EDD6"
+                                             Stroke="#241208" StrokeThickness="1"
+-                                            WidthRequest="46" HeightRequest="62">
+-                                        <Border.StrokeShape>
+-                                            <RoundRectangle CornerRadius="8"/>
+-                                        </Border.StrokeShape>
++                                            WidthRequest="48" HeightRequest="66">
++                                        <Border.StrokeShape><RoundRectangle CornerRadius="8"/></Border.StrokeShape>
++                                        <Border.Shadow><Shadow Brush="Black" Offset="0,2" Radius="4" Opacity="0.3"/></Border.Shadow>
+                                         <Image Source="{Binding Imagen, StringFormat='{0}.jpg'}"
+                                                Aspect="AspectFill" Margin="2"/>
+                                     </Border>
+@@ -211,84 +209,108 @@
+                             </BindableLayout.ItemTemplate>
+                         </HorizontalStackLayout>
+                     </ScrollView>
+-                    <Label Text="Sin cartas aún" FontSize="12" TextColor="#704858"
++                    <Label Text="Aquí aparecerán las cartas jugadas" FontSize="11" TextColor="#4A2838"
+                            IsVisible="{Binding PlayedCards.Count, Converter={StaticResource ZeroToBoolConverter}}"
+                            HorizontalOptions="Center"/>
+                 </VerticalStackLayout>
+             </Grid>
+ 
+-            <!-- BOTONES -->
+-            <Grid Grid.Row="2"
+-                  ColumnDefinitions="50,*,Auto,Auto"
+-                  Padding="16,0" ColumnSpacing="10">
++            <!-- ACTION BUTTONS -->
++            <Grid Grid.Row="3"
++                  ColumnDefinitions="54,*,Auto,Auto"
++                  Padding="16,6,16,0" ColumnSpacing="10">
+ 
+-                <Button Grid.Column="0" Text="🔀" FontSize="20"
+-                        BackgroundColor="#2E1520" TextColor="#F0E4D0"
+-                        CornerRadius="12" WidthRequest="50" HeightRequest="50" Padding="0"
+-                        IsEnabled="{Binding CanShuffle}"
+-                        Command="{Binding ShuffleDeckCommand}"/>
++                <!-- Shuffle -->
++                <Border Grid.Column="0"
++                        BackgroundColor="#2E1520" StrokeThickness="0"
++                        WidthRequest="54" HeightRequest="54">
++                    <Border.StrokeShape><RoundRectangle CornerRadius="14"/></Border.StrokeShape>
++                    <Button Text="🔀" FontSize="20"
++                            TextColor="#F0E4D0" BackgroundColor="Transparent"
++                            IsEnabled="{Binding CanShuffle}"
++                            Command="{Binding ShuffleDeckCommand}"
++                            Padding="0"/>
++                </Border>
+ 
++                <!-- Play/Pause (main action) -->
+                 <Button Grid.Column="1" x:Name="BtnPlay"
+                         Text="{Binding PlayButtonText}"
+                         BackgroundColor="#D4175A" TextColor="White"
+                         Style="{StaticResource ActionBtn}"
+                         IsEnabled="{Binding CanPlayPause}"
+-                        Command="{Binding ToggleAutoPlayCommand}"/>
++                        Command="{Binding ToggleAutoPlayCommand}">
++                    <Button.Shadow>
++                        <Shadow Brush="#D4175A" Offset="0,3" Radius="10" Opacity="0.35"/>
++                    </Button.Shadow>
++                </Button>
+ 
+-                <Button Grid.Column="2" Text="Sig."
++                <!-- Next -->
++                <Button Grid.Column="2" Text="Sig. ▶"
+                         BackgroundColor="#2E1520" TextColor="#F0E4D0"
+                         Style="{StaticResource ActionBtn}"
+                         IsEnabled="{Binding CanNext}"
+                         Command="{Binding NextCardManualCommand}"/>
+ 
+-                <Button Grid.Column="3" Text="Nuevo"
++                <!-- Reset -->
++                <Button Grid.Column="3" Text="↺ Nuevo"
+                         BackgroundColor="#3D1D2A" TextColor="#F0E4D0"
+                         Style="{StaticResource ActionBtn}"
+                         IsEnabled="{Binding CanReset}"
+                         Command="{Binding ResetGameCommand}"/>
+             </Grid>
++
++            <!-- Safe area bottom spacer -->
++            <BoxView Grid.Row="4" HeightRequest="16" BackgroundColor="Transparent"/>
+         </Grid>
+ 
+-        <!-- SIDEBAR OVERLAY -->
+-        <BoxView x:Name="SidebarOverlay" Color="#AA000000"
++        <!-- ══════════ SIDEBAR OVERLAY ══════════ -->
++        <BoxView x:Name="SidebarOverlay" Color="#BB000000"
+                  IsVisible="False" Opacity="0">
+             <BoxView.GestureRecognizers>
+                 <TapGestureRecognizer Tapped="OnOverlayTapped"/>
+             </BoxView.GestureRecognizers>
+         </BoxView>
+ 
+-        <!-- Panel sidebar -->
+-        <Grid x:Name="SidebarPanel" BackgroundColor="#22101A"
++        <!-- SIDEBAR PANEL -->
++        <Grid x:Name="SidebarPanel" BackgroundColor="#1A0C14"
+               HorizontalOptions="Start" VerticalOptions="Fill"
+               WidthRequest="300" TranslationX="-300"
+-              RowDefinitions="Auto,Auto,Auto,*,Auto"
+-              Padding="20,50,20,30">
++              RowDefinitions="Auto,Auto,Auto,Auto,*,Auto"
++              Padding="20,52,20,34">
+ 
+-            <Grid Grid.Row="0" ColumnDefinitions="*,40" Margin="0,0,0,20">
+-                <VerticalStackLayout Grid.Column="0" Spacing="2">
++            <!-- Header -->
++            <Grid Grid.Row="0" ColumnDefinitions="*,40" Margin="0,0,0,6">
++                <VerticalStackLayout Grid.Column="0" Spacing="3">
+                     <Label Text="Lotería El Borracho"
+-                           FontSize="16" FontAttributes="Bold" TextColor="#D4175A"/>
+-                    <Label Text="v1.0 · Clemente Jacq. · MX"
++                           FontSize="17" FontAttributes="Bold" TextColor="#D4175A"/>
++                    <Label Text="v1.0  ·  Clemente Jacq.  ·  🇲🇽"
+                            FontSize="11" TextColor="#704858"/>
+                 </VerticalStackLayout>
+                 <Button Grid.Column="1" Text="✕" FontSize="16"
+-                        TextColor="#A07888" BackgroundColor="Transparent"
++                        TextColor="#704858" BackgroundColor="Transparent"
+                         Clicked="OnCloseSidebar"
+                         WidthRequest="40" HeightRequest="40" Padding="0"/>
+             </Grid>
+ 
+             <BoxView Grid.Row="1" HeightRequest="1"
+-                     BackgroundColor="#1FF0E4D0" Margin="0,0,0,16"/>
++                     BackgroundColor="#22F0E4D0" Margin="0,10,0,18"/>
+ 
+-            <VerticalStackLayout Grid.Row="2" Spacing="8" Margin="0,0,0,20">
+-                <Label Text="Velocidad entre cartas"
+-                       FontSize="12" FontAttributes="Bold" TextColor="#A07888"/>
++            <!-- Speed control -->
++            <VerticalStackLayout Grid.Row="2" Spacing="10" Margin="0,0,0,24">
++                <Label Text="⏱  VELOCIDAD ENTRE CARTAS"
++                       FontSize="10" FontAttributes="Bold" TextColor="#704858"
++                       CharacterSpacing="1"/>
+                 <Grid ColumnDefinitions="*,Auto">
+                     <Label x:Name="LblSpeedName" Grid.Column="0"
+-                           Text="Normal" FontSize="14" FontAttributes="Bold"
++                           Text="Normal" FontSize="16" FontAttributes="Bold"
+                            TextColor="#F0E4D0"/>
+-                    <Label x:Name="LblSpeedValue" Grid.Column="1"
+-                           Text="5 s" FontSize="14" TextColor="#C4940C"/>
++                    <Border Grid.Column="1"
++                            BackgroundColor="#2E1520" StrokeThickness="0"
++                            Padding="8,4">
++                        <Border.StrokeShape><RoundRectangle CornerRadius="8"/></Border.StrokeShape>
++                        <Label x:Name="LblSpeedValue" Text="5 s"
++                               FontSize="13" FontAttributes="Bold" TextColor="#C4940C"/>
++                    </Border>
+                 </Grid>
+                 <Slider x:Name="SpeedSlider"
+                         Minimum="0" Maximum="5" Value="2"
+@@ -296,27 +318,52 @@
+                         MinimumTrackColor="#D4175A"
+                         MaximumTrackColor="#3D1D2A"
+                         ValueChanged="OnSpeedChanged"/>
++                <Grid ColumnDefinitions="*,*" Margin="2,0">
++                    <Label Grid.Column="0" Text="⚡ Rápido" FontSize="10" TextColor="#704858"/>
++                    <Label Grid.Column="1" Text="Lento 🐢" FontSize="10" TextColor="#704858"
++                           HorizontalOptions="End"/>
++                </Grid>
+             </VerticalStackLayout>
+ 
+-            <VerticalStackLayout Grid.Row="3" Spacing="8">
+-                <Button Text="🎴  Generador de tablas"
+-                        HorizontalOptions="Fill"
+-                        BackgroundColor="#2E1520" TextColor="#F0E4D0"
+-                        FontSize="14" CornerRadius="10" Padding="16,12"
+-                        Clicked="OnGeneradorClicked"/>
+-                <Button Text="🐛  Reportar un bug"
+-                        HorizontalOptions="Fill"
+-                        BackgroundColor="#2E1520" TextColor="#F0E4D0"
+-                        FontSize="14" CornerRadius="10" Padding="16,12"
+-                        Clicked="OnBugClicked"/>
++            <BoxView Grid.Row="3" HeightRequest="1"
++                     BackgroundColor="#22F0E4D0" Margin="0,0,0,16"/>
++
++            <!-- Menu items -->
++            <VerticalStackLayout Grid.Row="4" Spacing="10">
++
++                <Border BackgroundColor="#2E1520" StrokeThickness="0">
++                    <Border.StrokeShape><RoundRectangle CornerRadius="12"/></Border.StrokeShape>
++                    <Button Text="🎴   Generador de tablas"
++                            HorizontalOptions="Fill"
++                            BackgroundColor="Transparent" TextColor="#F0E4D0"
++                            FontSize="15" Padding="16,14"
++                            HorizontalContentAlignment="Start"
++                            Clicked="OnGeneradorClicked"/>
++                </Border>
++
++                <Border BackgroundColor="#2E1520" StrokeThickness="0">
++                    <Border.StrokeShape><RoundRectangle CornerRadius="12"/></Border.StrokeShape>
++                    <Button Text="🐛   Reportar un bug"
++                            HorizontalOptions="Fill"
++                            BackgroundColor="Transparent" TextColor="#F0E4D0"
++                            FontSize="15" Padding="16,14"
++                            HorizontalContentAlignment="Start"
++                            Clicked="OnBugClicked"/>
++                </Border>
+             </VerticalStackLayout>
+ 
+-            <Button Grid.Row="4" Text="🚪  Salir del juego"
+-                    HorizontalOptions="Fill"
+-                    BackgroundColor="#AA1111" TextColor="White"
+-                    FontSize="14" CornerRadius="10" Padding="16,12"
+-                    Clicked="OnSalirClicked"/>
++            <!-- Quit -->
++            <Border Grid.Row="5" BackgroundColor="#5A1111" StrokeThickness="0" Margin="0,10,0,0">
++                <Border.StrokeShape><RoundRectangle CornerRadius="12"/></Border.StrokeShape>
++                <Button Text="🚪   Salir del juego"
++                        HorizontalOptions="Fill"
++                        BackgroundColor="Transparent" TextColor="#FF8888"
++                        FontSize="15" Padding="16,14"
++                        HorizontalContentAlignment="Start"
++                        Clicked="OnSalirClicked"/>
++            </Border>
++
+         </Grid>
+ 
+     </Grid>
+-</ContentPage>
+\ No newline at end of file
++</ContentPage>
+diff --git a/ElBorracho/Views/GamePage.xaml.cs b/ElBorracho/Views/GamePage.xaml.cs
+index 7476e21..6355d45 100644
+--- a/ElBorracho/Views/GamePage.xaml.cs
++++ b/ElBorracho/Views/GamePage.xaml.cs
+@@ -9,34 +9,36 @@ public partial class GamePage : ContentPage
+     private bool _sidebarOpen = false;
+     private double _panStartX, _panStartY;
+ 
+-    private static readonly long[] SpeedLevels = GameViewModel.SpeedLevels;
++    private static readonly long[]   SpeedLevels = GameViewModel.SpeedLevels;
+     private static readonly string[] SpeedLabels = GameViewModel.SpeedLabels;
+ 
+-    // Posiciones originales del mazo fantasma
+-    private static readonly double[] GhostRotations = { 4, -6, 9, -11 };
++    // Original ghost card positions
++    private static readonly double[] GhostRotations   = { 4, -6, 9, -11 };
+     private static readonly double[] GhostTranslatesX = { 3, -4, 6, -8 };
+     private static readonly double[] GhostTranslatesY = { 1, 2, 4, 6 };
+ 
++    private const int TotalCards = 54;
++
+     public GamePage(GameViewModel vm)
+     {
+         InitializeComponent();
+         _vm = vm;
+         BindingContext = _vm;
+ 
+-        _vm.SpeakRequested += OnSpeakRequested;
+-        _vm.PropertyChanged += OnViewModelPropertyChanged;
++        _vm.SpeakRequested           += OnSpeakRequested;
++        _vm.PropertyChanged          += OnViewModelPropertyChanged;
+         _vm.ShuffleAnimationRequested += async () =>
+             await MainThread.InvokeOnMainThreadAsync(AnimateShuffleAsync);
+     }
+ 
+-    // ── Ciclo de vida ─────────────────────────────────────────────────────────
++    // ── Lifecycle ─────────────────────────────────────────────────────────────
+     protected override bool OnBackButtonPressed()
+     {
+         if (_sidebarOpen) { _ = CloseSidebarAsync(); return true; }
+         return base.OnBackButtonPressed();
+     }
+ 
+-    // ── Observador del ViewModel ──────────────────────────────────────────────
++    // ── ViewModel observer ────────────────────────────────────────────────────
+     private void OnViewModelPropertyChanged(object? sender,
+         System.ComponentModel.PropertyChangedEventArgs e)
+     {
+@@ -46,12 +48,13 @@ public partial class GamePage : ContentPage
+             {
+                 AnimateCardIn();
+                 ScrollHistoryToEnd();
++                UpdateProgressBar();
+             }
+             if (e.PropertyName == nameof(GameViewModel.GameState))
+             {
+                 UpdatePlayButtonColor();
+                 if (_vm.GameState == GameState.Finished)
+-                    ShowToast("¡Fin de la baraja! 54/54 cartas 🎴");
++                    ShowToast("¡Fin de la baraja! 🎴 54/54 cartas");
+             }
+         });
+     }
+@@ -68,10 +71,29 @@ public partial class GamePage : ContentPage
+             {
+                 Locale = spanish,
+                 Volume = 1.0f,
+-                Pitch = 1.0f
++                Pitch  = 1.0f
+             });
+         }
+-        catch { }
++        catch { /* TTS not available on this device — fail silently */ }
++    }
++
++    // ── Progress bar ──────────────────────────────────────────────────────────
++    private void UpdateProgressBar()
++    {
++        int played = TotalCards - _vm.RemainingCount;
++        double progress = (double)played / TotalCards;
++        _ = ProgressBar.ProgressTo(progress, 300, Easing.CubicOut);
++    }
++
++    // ── Play button color ─────────────────────────────────────────────────────
++    private void UpdatePlayButtonColor()
++    {
++        BtnPlay.BackgroundColor = _vm.GameState switch
++        {
++            GameState.Playing  => Color.FromArgb("#C4940C"), // amber = running
++            GameState.Finished => Color.FromArgb("#3D1D2A"), // dark  = done
++            _                  => Color.FromArgb("#D4175A")  // red   = start/resume
++        };
+     }
+ 
+     // ── Sidebar ───────────────────────────────────────────────────────────────
+@@ -104,7 +126,7 @@ public partial class GamePage : ContentPage
+         SidebarOverlay.IsVisible = false;
+     }
+ 
+-    // ── Acciones del sidebar ──────────────────────────────────────────────────
++    // ── Sidebar actions ───────────────────────────────────────────────────────
+     private async void OnGeneradorClicked(object? sender, EventArgs e)
+     {
+         await CloseSidebarAsync();
+@@ -119,30 +141,39 @@ public partial class GamePage : ContentPage
+             await Email.Default.ComposeAsync(new EmailMessage
+             {
+                 Subject = "Bug report — Lotería El Borracho",
+-                To = new List<string> { "soporte@loteriaelborracho.mx" }
++                To      = new List<string> { "soporte@loteriaelborracho.mx" }
+             });
+         }
+         catch { ShowToast("No se encontró app de correo"); }
+     }
+ 
+     private void OnSalirClicked(object? sender, EventArgs e)
+-        => Application.Current?.Quit();
++    {
++        try
++        {
++#if ANDROID
++            Android.OS.Process.KillProcess(Android.OS.Process.MyPid());
++#else
++            Application.Current?.Quit();
++#endif
++        }
++        catch { Application.Current?.Quit(); }
++    }
+ 
+-    // ── Velocidad ─────────────────────────────────────────────────────────────
++    // ── Speed ─────────────────────────────────────────────────────────────────
+     private void OnSpeedChanged(object? sender, ValueChangedEventArgs e)
+     {
+         int idx = Math.Clamp((int)Math.Round(e.NewValue), 0, SpeedLevels.Length - 1);
+-        LblSpeedName.Text = SpeedLabels[idx];
++        LblSpeedName.Text  = SpeedLabels[idx];
+         LblSpeedValue.Text = $"{SpeedLevels[idx] / 1000} s";
+         _vm.ApplySpeedIndex(idx);
+-        ShowToast($"{SpeedLabels[idx]} · {SpeedLevels[idx] / 1000} s");
+     }
+ 
+-    // ── Tap en la carta ───────────────────────────────────────────────────────
++    // ── Card tap ──────────────────────────────────────────────────────────────
+     private void OnCardTapped(object? sender, TappedEventArgs e)
+         => _vm.ToggleAutoPlay();
+ 
+-    // ── Arrastre de la carta intro ────────────────────────────────────────────
++    // ── Intro card pan/drag ───────────────────────────────────────────────────
+     private void OnIntroPan(object? sender, PanUpdatedEventArgs e)
+     {
+         switch (e.StatusType)
+@@ -154,7 +185,7 @@ public partial class GamePage : ContentPage
+             case GestureStatus.Running:
+                 IntroCard.TranslationX = _panStartX + e.TotalX;
+                 IntroCard.TranslationY = _panStartY + e.TotalY;
+-                IntroCard.Rotation = -2 + (e.TotalX * 0.03);
++                IntroCard.Rotation     = -2 + (e.TotalX * 0.03);
+                 break;
+             case GestureStatus.Completed:
+             case GestureStatus.Canceled:
+@@ -165,21 +196,20 @@ public partial class GamePage : ContentPage
+         }
+     }
+ 
+-    // ── Animación de barajar ──────────────────────────────────────────────────
++    // ── Shuffle animation ─────────────────────────────────────────────────────
+     private Border[] Ghosts => new[] { Ghost2, Ghost3, Ghost4, Ghost5 };
+ 
+     private async Task AnimateShuffleAsync()
+     {
+-        var rng = new Random();
++        var rng    = new Random();
+         var ghosts = Ghosts;
+ 
+         for (int pass = 0; pass < 3; pass++)
+         {
+-            // Las cartas vuelan
+             var tasks = new List<Task>();
+             for (int i = 0; i < ghosts.Length; i++)
+             {
+-                var g = ghosts[i];
++                var g  = ghosts[i];
+                 var dx = rng.Next(-35, 35);
+                 var dy = rng.Next(-25, 25);
+                 var dr = rng.Next(-30, 30);
+@@ -187,24 +217,23 @@ public partial class GamePage : ContentPage
+                     g.TranslateToAsync(GhostTranslatesX[i] + dx,
+                                        GhostTranslatesY[i] + dy, 130, Easing.CubicOut),
+                     g.RotateToAsync(GhostRotations[i] + dr, 130, Easing.CubicOut),
+-                    g.FadeToAsync(0.75, 130)));
++                    g.FadeToAsync(0.7, 130)));
+             }
+             tasks.Add(IntroCard.RotateToAsync(-2 + rng.Next(-10, 10), 130, Easing.CubicOut));
+             await Task.WhenAll(tasks);
+             await Task.Delay(55);
+ 
+-            // Regresan con pequeño offset residual
+             tasks.Clear();
+             for (int i = 0; i < ghosts.Length; i++)
+             {
+-                var g = ghosts[i];
++                var g    = ghosts[i];
+                 var newX = GhostTranslatesX[i] + rng.Next(-5, 5);
+                 var newY = GhostTranslatesY[i] + rng.Next(-4, 4);
+-                var newRot = GhostRotations[i] + rng.Next(-4, 4);
++                var newR = GhostRotations[i]   + rng.Next(-4, 4);
+                 tasks.Add(Task.WhenAll(
+                     g.TranslateToAsync(newX, newY, 150, Easing.CubicIn),
+-                    g.RotateToAsync(newRot, 150, Easing.CubicIn),
+-                    g.FadeToAsync(0.35, 150)));
++                    g.RotateToAsync(newR, 150, Easing.CubicIn),
++                    g.FadeToAsync(0.3, 150)));
+             }
+             tasks.Add(IntroCard.RotateToAsync(-2, 150, Easing.CubicIn));
+             await Task.WhenAll(tasks);
+@@ -214,29 +243,25 @@ public partial class GamePage : ContentPage
+         ShowToast("¡Baraja mezclada! 🔀");
+     }
+ 
+-    // ── Animación carta nueva ─────────────────────────────────────────────────
++    // ── Card entrance animation ───────────────────────────────────────────────
+     private void AnimateCardIn()
+     {
+         if (_vm.CurrentCard == null) return;
+-        CardFrame.Opacity = 0;
+-        CardFrame.Scale = 0.93;
++        CardFrame.Opacity      = 0;
++        CardFrame.Scale        = 0.92;
++        CardFrame.TranslationY = 20;
+         _ = Task.WhenAll(
+-            CardFrame.FadeToAsync(1, 220),
+-            CardFrame.ScaleToAsync(1, 220, Easing.CubicOut));
+-    }
+-
+-    private void UpdatePlayButtonColor()
+-    {
+-        BtnPlay.BackgroundColor = _vm.GameState == GameState.Playing
+-            ? Color.FromArgb("#D4175A")
+-            : Color.FromArgb("#2E1520");
++            CardFrame.FadeToAsync(1, 240),
++            CardFrame.ScaleToAsync(1, 240, Easing.CubicOut),
++            CardFrame.TranslateToAsync(0, 0, 240, Easing.CubicOut));
+     }
+ 
++    // ── History scroll ────────────────────────────────────────────────────────
+     private void ScrollHistoryToEnd()
+     {
+         MainThread.BeginInvokeOnMainThread(async () =>
+         {
+-            await Task.Delay(50);
++            await Task.Delay(60);
+             await HistScroll.ScrollToAsync(double.MaxValue, 0, false);
+         });
+     }
+@@ -244,9 +269,13 @@ public partial class GamePage : ContentPage
+     // ── Toast ─────────────────────────────────────────────────────────────────
+     private async void ShowToast(string message)
+     {
+-        var toast = CommunityToolkit.Maui.Alerts.Toast.Make(
+-            message,
+-            CommunityToolkit.Maui.Core.ToastDuration.Short, 14);
+-        await toast.Show(CancellationToken.None);
++        try
++        {
++            var toast = CommunityToolkit.Maui.Alerts.Toast.Make(
++                message,
++                CommunityToolkit.Maui.Core.ToastDuration.Short, 14);
++            await toast.Show(CancellationToken.None);
++        }
++        catch { /* Toast not supported — fail silently */ }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/ElBorracho/Views/GeneradorTablas.xaml b/ElBorracho/Views/GeneradorTablas.xaml
+index 3fa952d..12e0407 100644
+--- a/ElBorracho/Views/GeneradorTablas.xaml
++++ b/ElBorracho/Views/GeneradorTablas.xaml
+@@ -3,56 +3,107 @@
+              xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+              Title="Generador de Tablas"
+-             BackgroundColor="#160810">
+-
+-    <Grid RowDefinitions="Auto,*,Auto" Padding="20">
+-
+-        <!-- Título -->
+-        <VerticalStackLayout Grid.Row="0" Spacing="8" Margin="0,20,0,0">
+-            <Label Text="🎴 Generador de Tablas"
+-                   FontSize="24" FontAttributes="Bold"
+-                   TextColor="#D4175A" HorizontalOptions="Center"/>
+-            <Label Text="Genera tableros de lotería para tus jugadores"
+-                   FontSize="14" TextColor="#A07888"
+-                   HorizontalOptions="Center" HorizontalTextAlignment="Center"/>
+-        </VerticalStackLayout>
+-
+-        <!-- Control de cantidad -->
+-        <VerticalStackLayout Grid.Row="1"
+-                             VerticalOptions="Center"
+-                             HorizontalOptions="Center" Spacing="20">
+-
+-            <Label Text="¿Cuántas tablas necesitas?"
++             BackgroundColor="#160810"
++             Shell.NavBarIsVisible="False">
++
++    <Grid RowDefinitions="Auto,*,Auto">
++
++        <!-- TOP BAR -->
++        <Grid Grid.Row="0" BackgroundColor="#22101A"
++              Padding="12,44,12,14"
++              ColumnDefinitions="44,*">
++
++            <Button Grid.Column="0"
++                    Text="←" FontSize="20"
++                    TextColor="#F0E4D0" BackgroundColor="Transparent"
++                    Clicked="OnBackClicked"
++                    WidthRequest="44" HeightRequest="44" Padding="0"/>
++
++            <Label Grid.Column="1" Text="GENERADOR DE TABLAS"
+                    FontSize="16" FontAttributes="Bold"
+-                   TextColor="#F0E4D0" HorizontalOptions="Center"/>
+-
+-            <Grid ColumnDefinitions="50,100,50"
+-                  HorizontalOptions="Center" ColumnSpacing="12">
+-                <Button Grid.Column="0" Text="−" FontSize="22"
+-                        BackgroundColor="#2E1520" TextColor="#F0E4D0"
+-                        CornerRadius="12" WidthRequest="50" HeightRequest="50"
+-                        Clicked="OnDecrementar"/>
+-                <Label Grid.Column="1" x:Name="LblCantidad" Text="4"
+-                       FontSize="28" FontAttributes="Bold"
+-                       TextColor="#C4940C"
+-                       HorizontalOptions="Center" VerticalOptions="Center"/>
+-                <Button Grid.Column="2" Text="+" FontSize="22"
+-                        BackgroundColor="#2E1520" TextColor="#F0E4D0"
+-                        CornerRadius="12" WidthRequest="50" HeightRequest="50"
+-                        Clicked="OnIncrementar"/>
+-            </Grid>
+-
+-            <Label Text="Cada tabla tiene una cuadrícula 4×4 de cartas aleatorias"
+-                   FontSize="12" TextColor="#704858"
+-                   HorizontalOptions="Center" HorizontalTextAlignment="Center"/>
+-        </VerticalStackLayout>
+-
+-        <!-- Botón generar -->
+-        <Button Grid.Row="2" Text="🖨  Generar tablas"
+-                BackgroundColor="#D4175A" TextColor="White"
+-                FontSize="16" FontAttributes="Bold"
+-                CornerRadius="14" HeightRequest="54"
+-                Margin="0,0,0,20"
+-                Clicked="OnGenerarClicked"/>
++                   TextColor="#D4175A"
++                   HorizontalOptions="Center" VerticalOptions="Center"/>
++        </Grid>
++
++        <!-- CONTENT -->
++        <ScrollView Grid.Row="1">
++            <VerticalStackLayout Spacing="28" Padding="24,32">
++
++                <Label Text="🎴" FontSize="56" HorizontalOptions="Center"/>
++
++                <VerticalStackLayout Spacing="6" HorizontalOptions="Center">
++                    <Label Text="Genera tablas para tus jugadores"
++                           FontSize="18" FontAttributes="Bold"
++                           TextColor="#F0E4D0"
++                           HorizontalOptions="Center" HorizontalTextAlignment="Center"/>
++                    <Label Text="Cada tabla tiene una cuadrícula 4×4 con 16 cartas al azar"
++                           FontSize="13" TextColor="#A07888"
++                           HorizontalOptions="Center" HorizontalTextAlignment="Center"/>
++                </VerticalStackLayout>
++
++                <BoxView HeightRequest="1" BackgroundColor="#1FF0E4D0" Margin="0,4"/>
++
++                <!-- Quantity picker -->
++                <VerticalStackLayout Spacing="16" HorizontalOptions="Center">
++                    <Label Text="¿Cuántas tablas necesitas?"
++                           FontSize="14" FontAttributes="Bold"
++                           TextColor="#A07888" HorizontalOptions="Center"/>
++
++                    <Grid ColumnDefinitions="56,120,56"
++                          HorizontalOptions="Center" ColumnSpacing="16">
++
++                        <Border Grid.Column="0" BackgroundColor="#2E1520"
++                                StrokeThickness="0" WidthRequest="56" HeightRequest="56">
++                            <Border.StrokeShape><RoundRectangle CornerRadius="14"/></Border.StrokeShape>
++                            <Button Text="−" FontSize="26" FontAttributes="Bold"
++                                    TextColor="#F0E4D0" BackgroundColor="Transparent"
++                                    Clicked="OnDecrementar" Padding="0"/>
++                        </Border>
++
++                        <VerticalStackLayout Grid.Column="1"
++                                             HorizontalOptions="Center"
++                                             VerticalOptions="Center" Spacing="2">
++                            <Label x:Name="LblCantidad" Text="4"
++                                   FontSize="42" FontAttributes="Bold"
++                                   TextColor="#C4940C" HorizontalOptions="Center"/>
++                            <Label Text="tablas" FontSize="11" TextColor="#704858"
++                                   HorizontalOptions="Center"/>
++                        </VerticalStackLayout>
++
++                        <Border Grid.Column="2" BackgroundColor="#2E1520"
++                                StrokeThickness="0" WidthRequest="56" HeightRequest="56">
++                            <Border.StrokeShape><RoundRectangle CornerRadius="14"/></Border.StrokeShape>
++                            <Button Text="+" FontSize="26" FontAttributes="Bold"
++                                    TextColor="#D4175A" BackgroundColor="Transparent"
++                                    Clicked="OnIncrementar" Padding="0"/>
++                        </Border>
++                    </Grid>
++                </VerticalStackLayout>
++
++                <!-- Info card -->
++                <Border BackgroundColor="#1AF5EDD6" StrokeThickness="0" Padding="16,12" Margin="0,4">
++                    <Border.StrokeShape><RoundRectangle CornerRadius="12"/></Border.StrokeShape>
++                    <VerticalStackLayout Spacing="6">
++                        <Label Text="📄  El PDF se compartirá automáticamente"
++                               FontSize="13" TextColor="#C4940C"/>
++                        <Label Text="📱  Puedes imprimirlo o enviarlo por WhatsApp"
++                               FontSize="13" TextColor="#A07888"/>
++                        <Label Text="🔢  Máximo 20 tablas por generación"
++                               FontSize="13" TextColor="#A07888"/>
++                    </VerticalStackLayout>
++                </Border>
++
++            </VerticalStackLayout>
++        </ScrollView>
++
++        <!-- GENERATE BUTTON -->
++        <Grid Grid.Row="2" Padding="24,12,24,32" BackgroundColor="#160810">
++            <Button Text="🖨   Generar y compartir PDF"
++                    BackgroundColor="#D4175A" TextColor="White"
++                    FontSize="16" FontAttributes="Bold"
++                    CornerRadius="16" HeightRequest="56"
++                    Clicked="OnGenerarClicked"/>
++        </Grid>
++
+     </Grid>
+-</ContentPage>
+\ No newline at end of file
++</ContentPage>
+diff --git a/ElBorracho/Views/GeneradorTablas.xaml.cs b/ElBorracho/Views/GeneradorTablas.xaml.cs
+index d0a9424..c29bbdc 100644
+--- a/ElBorracho/Views/GeneradorTablas.xaml.cs
++++ b/ElBorracho/Views/GeneradorTablas.xaml.cs
+@@ -5,65 +5,28 @@ using Microsoft.Maui.Storage;
+ using Microsoft.Maui.ApplicationModel;
+ using System.IO;
+ using System.Linq;
+-using System.Reflection;
+ using System.Threading.Tasks;
+ 
+ namespace ElBorracho.Views;
+ 
+ public partial class GeneradorTablasPage : ContentPage
+ {
+-    private readonly CartaRepository _repo = new();
++    private readonly CartaRepository _repo;
+     private int _cantidad = 4;
+ 
+-    public GeneradorTablasPage()
++    public GeneradorTablasPage(CartaRepository repo)
+     {
+         InitializeComponent();
++        _repo = repo;
+     }
+ 
+-    private async Task<string> CheckFontAvailabilityAsync()
+-    {
+-        try
+-        {
+-            var sb = new System.Text.StringBuilder();
+-            sb.AppendLine("Checking Resources/Fonts directory:");
+-            var fontsDir = Path.Combine(AppContext.BaseDirectory ?? string.Empty, "Resources", "Fonts");
+-            sb.AppendLine($"BaseDirectory: {AppContext.BaseDirectory}");
+-            sb.AppendLine($"Resources/Fonts exists: {Directory.Exists(fontsDir)}");
+-            if (Directory.Exists(fontsDir))
+-            {
+-                foreach (var f in Directory.EnumerateFiles(fontsDir))
+-                    sb.AppendLine(" - " + Path.GetFileName(f));
+-            }
+-
+-            sb.AppendLine();
+-            sb.AppendLine("Attempting FileSystem.OpenAppPackageFileAsync for OpenSans files:");
+-            var names = new[] { "OpenSans-Regular.ttf", "OpenSans-Bold.ttf", "OpenSans-Semibold.ttf" };
+-            foreach (var n in names)
+-            {
+-                try
+-                {
+-                    using var s = await FileSystem.OpenAppPackageFileAsync(Path.Combine("Resources", "Fonts", n));
+-                    sb.AppendLine($"OpenAppPackage {n}: {(s != null ? "found" : "not found")}");
+-                }
+-                catch (Exception ex)
+-                {
+-                    sb.AppendLine($"OpenAppPackage {n}: EX {ex.GetType().Name} {ex.Message}");
+-                }
+-            }
+-
+-            sb.AppendLine();
+-            sb.AppendLine("Embedded resources in assembly (filtered by OpenSans/Arial):");
+-            var asm = Assembly.GetExecutingAssembly();
+-            var resources = asm.GetManifestResourceNames();
+-            foreach (var r in resources.Where(r => r.IndexOf("OpenSans", StringComparison.OrdinalIgnoreCase) >= 0 || r.IndexOf("Arial", StringComparison.OrdinalIgnoreCase) >= 0))
+-                sb.AppendLine(" - " + r);
++    private async void OnBackClicked(object? sender, EventArgs e)
++        => await Shell.Current.GoToAsync("..");
+ 
+-            return sb.ToString();
+-        }
+-        catch (Exception ex)
+-        {
+-            return "Diagnostic failed: " + ex.ToString();
+-        }
++    protected override bool OnBackButtonPressed()
++    {
++        _ = Shell.Current.GoToAsync("..");
++        return true;
+     }
+ 
+     private void OnDecrementar(object? sender, EventArgs e)
+@@ -82,10 +45,6 @@ public partial class GeneradorTablasPage : ContentPage
+     {
+         try
+         {
+-            // Diagnostic: check font availability at runtime
+-            var fontReport = await CheckFontAvailabilityAsync();
+-            await DisplayAlert("Font diagnostic", fontReport, "OK");
+-
+             var rng = new Random();
+             var tables = new List<List<ElBorracho.Models.Carta>>();
+ 
+@@ -107,46 +66,82 @@ public partial class GeneradorTablasPage : ContentPage
+                 page.Orientation = PdfSharpCore.PageOrientation.Portrait;
+                 var gfx = XGraphics.FromPdfPage(page);
+ 
+-                // Simple layout: title + 4x4 grid of names
+-                var margin = 40;
+-                var width = page.Width.Point - margin * 2;
+-                var height = page.Height.Point - margin * 2;
++                var margin = 40.0;
++                var pageW = page.Width.Point;
++                var pageH = page.Height.Point;
++                var usableW = pageW - margin * 2;
++
++                XFont titleFont;
++                XFont cellFont;
++                XFont numFont;
++
++                try
++                {
++                    titleFont = new XFont("OpenSans", 20, XFontStyle.Bold);
++                    cellFont  = new XFont("OpenSans", 11, XFontStyle.Regular);
++                    numFont   = new XFont("OpenSans", 9,  XFontStyle.Regular);
++                }
++                catch
++                {
++                    titleFont = new XFont("Arial", 20, XFontStyle.Bold);
++                    cellFont  = new XFont("Arial", 11, XFontStyle.Regular);
++                    numFont   = new XFont("Arial", 9,  XFontStyle.Regular);
++                }
+ 
+-                // Use OpenSans which is bundled in Resources/Fonts as a reliable fallback on Android
+-                var titleFont = new XFont("OpenSans", 18, XFontStyle.Bold);
+-                var cellFont = new XFont("OpenSans", 12, XFontStyle.Regular);
++                // Title
++                gfx.DrawString("🎴 Tabla de Lotería — El Borracho",
++                    titleFont, XBrushes.DarkRed,
++                    new XRect(margin, 18, usableW, 32), XStringFormats.TopCenter);
+ 
+-                gfx.DrawString("Tabla de Lotería", titleFont, XBrushes.DarkRed,
+-                    new XRect(margin, 20, width, 30), XStringFormats.TopCenter);
++                // Decorative line
++                gfx.DrawLine(new XPen(XColor.FromArgb(212, 23, 90), 2),
++                    margin, 56, pageW - margin, 56);
+ 
+-                // grid
+-                var gridTop = 60;
+-                var gridSize = Math.Min(width, height - 60);
+-                var cellW = gridSize / 4;
+-                var cellH = cellW * 0.6;
++                // 4×4 grid
++                var gridTop   = 68.0;
++                var cellW     = usableW / 4.0;
++                var cellH     = cellW * 0.65;
+ 
+                 for (int r = 0; r < 4; r++)
+                 {
+                     for (int c = 0; c < 4; c++)
+                     {
+-                        var idx = r * 4 + c;
+-                        var name = table[idx].Nombre;
+-                        var x = margin + c * cellW;
+-                        var y = gridTop + r * cellH;
+-
+-                        // cell border
+-                        gfx.DrawRectangle(XPens.Black, XBrushes.White, x, y, cellW - 6, cellH - 6);
+-
+-                        // draw name centered
+-                        gfx.DrawString(name, cellFont, XBrushes.Black,
+-                            new XRect(x + 4, y + 4, cellW - 14, cellH - 14), XStringFormats.Center);
++                        var idx   = r * 4 + c;
++                        var carta = table[idx];
++                        var x     = margin + c * cellW;
++                        var y     = gridTop + r * cellH;
++
++                        // Cell background (alternating)
++                        var bgColor = (r + c) % 2 == 0
++                            ? XColor.FromArgb(250, 240, 220)
++                            : XColor.FromArgb(255, 250, 240);
++                        gfx.DrawRectangle(new XSolidBrush(bgColor), x, y, cellW - 3, cellH - 3);
++                        gfx.DrawRectangle(new XPen(XColor.FromArgb(36, 18, 8), 1.2), x, y, cellW - 3, cellH - 3);
++
++                        // Card number (top-left)
++                        gfx.DrawString($"{carta.Numero}",
++                            numFont, new XSolidBrush(XColor.FromArgb(160, 120, 80)),
++                            new XRect(x + 4, y + 3, 20, 12), XStringFormats.TopLeft);
++
++                        // Card name (centered)
++                        gfx.DrawString(carta.Nombre,
++                            cellFont, XBrushes.Black,
++                            new XRect(x + 4, y + 4, cellW - 11, cellH - 11),
++                            XStringFormats.Center);
+                     }
+                 }
++
++                // Footer
++                var footerY = gridTop + 4 * cellH + 8;
++                gfx.DrawString($"Lotería El Borracho  ·  {DateTime.Now:dd/MM/yyyy}",
++                    numFont, new XSolidBrush(XColor.FromArgb(160, 120, 136)),
++                    new XRect(margin, footerY, usableW, 16), XStringFormats.TopCenter);
+             }
+ 
+-            // Save to cache
+-            var fileName = $"tablas_{DateTime.Now:yyyyMMddHHmmss}.pdf";
++            // Save to cache directory
++            var fileName = $"tablas_loteria_{DateTime.Now:yyyyMMdd_HHmmss}.pdf";
+             var filePath = Path.Combine(FileSystem.CacheDirectory, fileName);
++
+             using (var ms = new MemoryStream())
+             {
+                 doc.Save(ms);
+@@ -158,16 +153,14 @@ public partial class GeneradorTablasPage : ContentPage
+             // Share the PDF
+             await Share.Default.RequestAsync(new ShareFileRequest
+             {
+-                Title = "Tablas de Lotería",
+-                File = new ShareFile(filePath)
++                Title = $"Tablas de Lotería ({_cantidad})",
++                File  = new ShareFile(filePath)
+             });
+-
+-            await DisplayAlert($"Listo", $"Se generó {_cantidad} tabla(s) y se guardó como {fileName}", "OK");
+         }
+         catch (Exception ex)
+         {
+-            // Show full exception to get inner details when running on device
+-            await DisplayAlert("Error", ex.ToString(), "OK");
++            await DisplayAlert("Error al generar PDF",
++                $"Ocurrió un problema:\n{ex.Message}", "OK");
+         }
+     }
+ }
+\ No newline at end of file

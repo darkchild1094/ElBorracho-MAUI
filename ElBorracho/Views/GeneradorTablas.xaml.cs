@@ -5,65 +5,28 @@ using Microsoft.Maui.Storage;
 using Microsoft.Maui.ApplicationModel;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Threading.Tasks;
 
 namespace ElBorracho.Views;
 
 public partial class GeneradorTablasPage : ContentPage
 {
-    private readonly CartaRepository _repo = new();
+    private readonly CartaRepository _repo;
     private int _cantidad = 4;
 
-    public GeneradorTablasPage()
+    public GeneradorTablasPage(CartaRepository repo)
     {
         InitializeComponent();
+        _repo = repo;
     }
 
-    private async Task<string> CheckFontAvailabilityAsync()
+    private async void OnBackClicked(object? sender, EventArgs e)
+        => await Shell.Current.GoToAsync("..");
+
+    protected override bool OnBackButtonPressed()
     {
-        try
-        {
-            var sb = new System.Text.StringBuilder();
-            sb.AppendLine("Checking Resources/Fonts directory:");
-            var fontsDir = Path.Combine(AppContext.BaseDirectory ?? string.Empty, "Resources", "Fonts");
-            sb.AppendLine($"BaseDirectory: {AppContext.BaseDirectory}");
-            sb.AppendLine($"Resources/Fonts exists: {Directory.Exists(fontsDir)}");
-            if (Directory.Exists(fontsDir))
-            {
-                foreach (var f in Directory.EnumerateFiles(fontsDir))
-                    sb.AppendLine(" - " + Path.GetFileName(f));
-            }
-
-            sb.AppendLine();
-            sb.AppendLine("Attempting FileSystem.OpenAppPackageFileAsync for OpenSans files:");
-            var names = new[] { "OpenSans-Regular.ttf", "OpenSans-Bold.ttf", "OpenSans-Semibold.ttf" };
-            foreach (var n in names)
-            {
-                try
-                {
-                    using var s = await FileSystem.OpenAppPackageFileAsync(Path.Combine("Resources", "Fonts", n));
-                    sb.AppendLine($"OpenAppPackage {n}: {(s != null ? "found" : "not found")}");
-                }
-                catch (Exception ex)
-                {
-                    sb.AppendLine($"OpenAppPackage {n}: EX {ex.GetType().Name} {ex.Message}");
-                }
-            }
-
-            sb.AppendLine();
-            sb.AppendLine("Embedded resources in assembly (filtered by OpenSans/Arial):");
-            var asm = Assembly.GetExecutingAssembly();
-            var resources = asm.GetManifestResourceNames();
-            foreach (var r in resources.Where(r => r.IndexOf("OpenSans", StringComparison.OrdinalIgnoreCase) >= 0 || r.IndexOf("Arial", StringComparison.OrdinalIgnoreCase) >= 0))
-                sb.AppendLine(" - " + r);
-
-            return sb.ToString();
-        }
-        catch (Exception ex)
-        {
-            return "Diagnostic failed: " + ex.ToString();
-        }
+        _ = Shell.Current.GoToAsync("..");
+        return true;
     }
 
     private void OnDecrementar(object? sender, EventArgs e)
@@ -82,10 +45,6 @@ public partial class GeneradorTablasPage : ContentPage
     {
         try
         {
-            // Diagnostic: check font availability at runtime
-            var fontReport = await CheckFontAvailabilityAsync();
-            await DisplayAlert("Font diagnostic", fontReport, "OK");
-
             var rng = new Random();
             var tables = new List<List<ElBorracho.Models.Carta>>();
 
@@ -107,46 +66,82 @@ public partial class GeneradorTablasPage : ContentPage
                 page.Orientation = PdfSharpCore.PageOrientation.Portrait;
                 var gfx = XGraphics.FromPdfPage(page);
 
-                // Simple layout: title + 4x4 grid of names
-                var margin = 40;
-                var width = page.Width.Point - margin * 2;
-                var height = page.Height.Point - margin * 2;
+                var margin = 40.0;
+                var pageW = page.Width.Point;
+                var pageH = page.Height.Point;
+                var usableW = pageW - margin * 2;
 
-                // Use OpenSans which is bundled in Resources/Fonts as a reliable fallback on Android
-                var titleFont = new XFont("OpenSans", 18, XFontStyle.Bold);
-                var cellFont = new XFont("OpenSans", 12, XFontStyle.Regular);
+                XFont titleFont;
+                XFont cellFont;
+                XFont numFont;
 
-                gfx.DrawString("Tabla de Lotería", titleFont, XBrushes.DarkRed,
-                    new XRect(margin, 20, width, 30), XStringFormats.TopCenter);
+                try
+                {
+                    titleFont = new XFont("OpenSans", 20, XFontStyle.Bold);
+                    cellFont  = new XFont("OpenSans", 11, XFontStyle.Regular);
+                    numFont   = new XFont("OpenSans", 9,  XFontStyle.Regular);
+                }
+                catch
+                {
+                    titleFont = new XFont("Arial", 20, XFontStyle.Bold);
+                    cellFont  = new XFont("Arial", 11, XFontStyle.Regular);
+                    numFont   = new XFont("Arial", 9,  XFontStyle.Regular);
+                }
 
-                // grid
-                var gridTop = 60;
-                var gridSize = Math.Min(width, height - 60);
-                var cellW = gridSize / 4;
-                var cellH = cellW * 0.6;
+                // Title
+                gfx.DrawString("🎴 Tabla de Lotería — El Borracho",
+                    titleFont, XBrushes.DarkRed,
+                    new XRect(margin, 18, usableW, 32), XStringFormats.TopCenter);
+
+                // Decorative line
+                gfx.DrawLine(new XPen(XColor.FromArgb(212, 23, 90), 2),
+                    margin, 56, pageW - margin, 56);
+
+                // 4×4 grid
+                var gridTop   = 68.0;
+                var cellW     = usableW / 4.0;
+                var cellH     = cellW * 0.65;
 
                 for (int r = 0; r < 4; r++)
                 {
                     for (int c = 0; c < 4; c++)
                     {
-                        var idx = r * 4 + c;
-                        var name = table[idx].Nombre;
-                        var x = margin + c * cellW;
-                        var y = gridTop + r * cellH;
+                        var idx   = r * 4 + c;
+                        var carta = table[idx];
+                        var x     = margin + c * cellW;
+                        var y     = gridTop + r * cellH;
 
-                        // cell border
-                        gfx.DrawRectangle(XPens.Black, XBrushes.White, x, y, cellW - 6, cellH - 6);
+                        // Cell background (alternating)
+                        var bgColor = (r + c) % 2 == 0
+                            ? XColor.FromArgb(250, 240, 220)
+                            : XColor.FromArgb(255, 250, 240);
+                        gfx.DrawRectangle(new XSolidBrush(bgColor), x, y, cellW - 3, cellH - 3);
+                        gfx.DrawRectangle(new XPen(XColor.FromArgb(36, 18, 8), 1.2), x, y, cellW - 3, cellH - 3);
 
-                        // draw name centered
-                        gfx.DrawString(name, cellFont, XBrushes.Black,
-                            new XRect(x + 4, y + 4, cellW - 14, cellH - 14), XStringFormats.Center);
+                        // Card number (top-left)
+                        gfx.DrawString($"{carta.Numero}",
+                            numFont, new XSolidBrush(XColor.FromArgb(160, 120, 80)),
+                            new XRect(x + 4, y + 3, 20, 12), XStringFormats.TopLeft);
+
+                        // Card name (centered)
+                        gfx.DrawString(carta.Nombre,
+                            cellFont, XBrushes.Black,
+                            new XRect(x + 4, y + 4, cellW - 11, cellH - 11),
+                            XStringFormats.Center);
                     }
                 }
+
+                // Footer
+                var footerY = gridTop + 4 * cellH + 8;
+                gfx.DrawString($"Lotería El Borracho  ·  {DateTime.Now:dd/MM/yyyy}",
+                    numFont, new XSolidBrush(XColor.FromArgb(160, 120, 136)),
+                    new XRect(margin, footerY, usableW, 16), XStringFormats.TopCenter);
             }
 
-            // Save to cache
-            var fileName = $"tablas_{DateTime.Now:yyyyMMddHHmmss}.pdf";
+            // Save to cache directory
+            var fileName = $"tablas_loteria_{DateTime.Now:yyyyMMdd_HHmmss}.pdf";
             var filePath = Path.Combine(FileSystem.CacheDirectory, fileName);
+
             using (var ms = new MemoryStream())
             {
                 doc.Save(ms);
@@ -158,16 +153,14 @@ public partial class GeneradorTablasPage : ContentPage
             // Share the PDF
             await Share.Default.RequestAsync(new ShareFileRequest
             {
-                Title = "Tablas de Lotería",
-                File = new ShareFile(filePath)
+                Title = $"Tablas de Lotería ({_cantidad})",
+                File  = new ShareFile(filePath)
             });
-
-            await DisplayAlert($"Listo", $"Se generó {_cantidad} tabla(s) y se guardó como {fileName}", "OK");
         }
         catch (Exception ex)
         {
-            // Show full exception to get inner details when running on device
-            await DisplayAlert("Error", ex.ToString(), "OK");
+            await DisplayAlert("Error al generar PDF",
+                $"Ocurrió un problema:\n{ex.Message}", "OK");
         }
     }
 }

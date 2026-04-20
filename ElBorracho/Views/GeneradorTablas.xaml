@@ -3,56 +3,107 @@
              xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              Title="Generador de Tablas"
-             BackgroundColor="#160810">
+             BackgroundColor="#160810"
+             Shell.NavBarIsVisible="False">
 
-    <Grid RowDefinitions="Auto,*,Auto" Padding="20">
+    <Grid RowDefinitions="Auto,*,Auto">
 
-        <!-- Título -->
-        <VerticalStackLayout Grid.Row="0" Spacing="8" Margin="0,20,0,0">
-            <Label Text="🎴 Generador de Tablas"
-                   FontSize="24" FontAttributes="Bold"
-                   TextColor="#D4175A" HorizontalOptions="Center"/>
-            <Label Text="Genera tableros de lotería para tus jugadores"
-                   FontSize="14" TextColor="#A07888"
-                   HorizontalOptions="Center" HorizontalTextAlignment="Center"/>
-        </VerticalStackLayout>
+        <!-- TOP BAR -->
+        <Grid Grid.Row="0" BackgroundColor="#22101A"
+              Padding="12,44,12,14"
+              ColumnDefinitions="44,*">
 
-        <!-- Control de cantidad -->
-        <VerticalStackLayout Grid.Row="1"
-                             VerticalOptions="Center"
-                             HorizontalOptions="Center" Spacing="20">
+            <Button Grid.Column="0"
+                    Text="←" FontSize="20"
+                    TextColor="#F0E4D0" BackgroundColor="Transparent"
+                    Clicked="OnBackClicked"
+                    WidthRequest="44" HeightRequest="44" Padding="0"/>
 
-            <Label Text="¿Cuántas tablas necesitas?"
+            <Label Grid.Column="1" Text="GENERADOR DE TABLAS"
                    FontSize="16" FontAttributes="Bold"
-                   TextColor="#F0E4D0" HorizontalOptions="Center"/>
+                   TextColor="#D4175A"
+                   HorizontalOptions="Center" VerticalOptions="Center"/>
+        </Grid>
 
-            <Grid ColumnDefinitions="50,100,50"
-                  HorizontalOptions="Center" ColumnSpacing="12">
-                <Button Grid.Column="0" Text="−" FontSize="22"
-                        BackgroundColor="#2E1520" TextColor="#F0E4D0"
-                        CornerRadius="12" WidthRequest="50" HeightRequest="50"
-                        Clicked="OnDecrementar"/>
-                <Label Grid.Column="1" x:Name="LblCantidad" Text="4"
-                       FontSize="28" FontAttributes="Bold"
-                       TextColor="#C4940C"
-                       HorizontalOptions="Center" VerticalOptions="Center"/>
-                <Button Grid.Column="2" Text="+" FontSize="22"
-                        BackgroundColor="#2E1520" TextColor="#F0E4D0"
-                        CornerRadius="12" WidthRequest="50" HeightRequest="50"
-                        Clicked="OnIncrementar"/>
-            </Grid>
+        <!-- CONTENT -->
+        <ScrollView Grid.Row="1">
+            <VerticalStackLayout Spacing="28" Padding="24,32">
 
-            <Label Text="Cada tabla tiene una cuadrícula 4×4 de cartas aleatorias"
-                   FontSize="12" TextColor="#704858"
-                   HorizontalOptions="Center" HorizontalTextAlignment="Center"/>
-        </VerticalStackLayout>
+                <Label Text="🎴" FontSize="56" HorizontalOptions="Center"/>
 
-        <!-- Botón generar -->
-        <Button Grid.Row="2" Text="🖨  Generar tablas"
-                BackgroundColor="#D4175A" TextColor="White"
-                FontSize="16" FontAttributes="Bold"
-                CornerRadius="14" HeightRequest="54"
-                Margin="0,0,0,20"
-                Clicked="OnGenerarClicked"/>
+                <VerticalStackLayout Spacing="6" HorizontalOptions="Center">
+                    <Label Text="Genera tablas para tus jugadores"
+                           FontSize="18" FontAttributes="Bold"
+                           TextColor="#F0E4D0"
+                           HorizontalOptions="Center" HorizontalTextAlignment="Center"/>
+                    <Label Text="Cada tabla tiene una cuadrícula 4×4 con 16 cartas al azar"
+                           FontSize="13" TextColor="#A07888"
+                           HorizontalOptions="Center" HorizontalTextAlignment="Center"/>
+                </VerticalStackLayout>
+
+                <BoxView HeightRequest="1" BackgroundColor="#1FF0E4D0" Margin="0,4"/>
+
+                <!-- Quantity picker -->
+                <VerticalStackLayout Spacing="16" HorizontalOptions="Center">
+                    <Label Text="¿Cuántas tablas necesitas?"
+                           FontSize="14" FontAttributes="Bold"
+                           TextColor="#A07888" HorizontalOptions="Center"/>
+
+                    <Grid ColumnDefinitions="56,120,56"
+                          HorizontalOptions="Center" ColumnSpacing="16">
+
+                        <Border Grid.Column="0" BackgroundColor="#2E1520"
+                                StrokeThickness="0" WidthRequest="56" HeightRequest="56">
+                            <Border.StrokeShape><RoundRectangle CornerRadius="14"/></Border.StrokeShape>
+                            <Button Text="−" FontSize="26" FontAttributes="Bold"
+                                    TextColor="#F0E4D0" BackgroundColor="Transparent"
+                                    Clicked="OnDecrementar" Padding="0"/>
+                        </Border>
+
+                        <VerticalStackLayout Grid.Column="1"
+                                             HorizontalOptions="Center"
+                                             VerticalOptions="Center" Spacing="2">
+                            <Label x:Name="LblCantidad" Text="4"
+                                   FontSize="42" FontAttributes="Bold"
+                                   TextColor="#C4940C" HorizontalOptions="Center"/>
+                            <Label Text="tablas" FontSize="11" TextColor="#704858"
+                                   HorizontalOptions="Center"/>
+                        </VerticalStackLayout>
+
+                        <Border Grid.Column="2" BackgroundColor="#2E1520"
+                                StrokeThickness="0" WidthRequest="56" HeightRequest="56">
+                            <Border.StrokeShape><RoundRectangle CornerRadius="14"/></Border.StrokeShape>
+                            <Button Text="+" FontSize="26" FontAttributes="Bold"
+                                    TextColor="#D4175A" BackgroundColor="Transparent"
+                                    Clicked="OnIncrementar" Padding="0"/>
+                        </Border>
+                    </Grid>
+                </VerticalStackLayout>
+
+                <!-- Info card -->
+                <Border BackgroundColor="#1AF5EDD6" StrokeThickness="0" Padding="16,12" Margin="0,4">
+                    <Border.StrokeShape><RoundRectangle CornerRadius="12"/></Border.StrokeShape>
+                    <VerticalStackLayout Spacing="6">
+                        <Label Text="📄  El PDF se compartirá automáticamente"
+                               FontSize="13" TextColor="#C4940C"/>
+                        <Label Text="📱  Puedes imprimirlo o enviarlo por WhatsApp"
+                               FontSize="13" TextColor="#A07888"/>
+                        <Label Text="🔢  Máximo 20 tablas por generación"
+                               FontSize="13" TextColor="#A07888"/>
+                    </VerticalStackLayout>
+                </Border>
+
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <!-- GENERATE BUTTON -->
+        <Grid Grid.Row="2" Padding="24,12,24,32" BackgroundColor="#160810">
+            <Button Text="🖨   Generar y compartir PDF"
+                    BackgroundColor="#D4175A" TextColor="White"
+                    FontSize="16" FontAttributes="Bold"
+                    CornerRadius="16" HeightRequest="56"
+                    Clicked="OnGenerarClicked"/>
+        </Grid>
+
     </Grid>
 </ContentPage>
